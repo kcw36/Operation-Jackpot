@@ -26,8 +26,7 @@ All game logic, animation, styling, and markup live in this one file. Do not spl
 
 | Key | Emoji | Weight | Notes |
 |---|---|---|---|
-| HELMET | 🪖 | 20 | Most common |
-| DOG_TAGS | 🏅 | 18 | |
+| DOG_TAGS | 🏅 | 18 | Most common |
 | BOOTS | 👟 | 16 | |
 | PISTOL | 🔫 | 14 | |
 | RIFLE | 🎯 | 12 | |
@@ -36,8 +35,8 @@ All game logic, animation, styling, and markup live in this one file. Do not spl
 | TANK | ⚙️ | 5 | Rarest regular symbol |
 | WILD | ⭐ | 3 | Substitutes for regular symbols; can also form its own pure-wild clusters |
 | SCATTER | 🚩 | 2 | Only spawns on reels 2–5 (index 1–4); weight=0 on reels 1 & 6 |
-| BOMB | 💣 | 2 | Explodes entire row + column of its position; replaced by SUPER_BOMB in free spins |
-| SUPER_BOMB | ☢️ | 1 | Clears entire grid; weight increases to 3 in free spins |
+| BOMB | 💣 | 1 | Explodes entire row + column of its position; replaced by SUPER_BOMB in free spins |
+| SUPER_BOMB | ☢️ | 0.5 | Clears entire grid; weight increases to 3 in free spins |
 
 ### Wild Behaviour
 - Wilds join clusters of matching regular symbols (acts as that symbol)
@@ -48,7 +47,6 @@ All game logic, animation, styling, and markup live in this one file. Do not spl
 
 | Symbol | ×5 | ×7 | ×9 | ×12 | ×15+ |
 |---|---|---|---|---|---|
-| HELMET | 0.2 | 0.4 | 0.8 | 1.5 | 3 |
 | DOG_TAGS | 0.3 | 0.6 | 1.0 | 2.0 | 4 |
 | BOOTS | 0.4 | 0.8 | 1.5 | 3.0 | 6 |
 | PISTOL | 0.6 | 1.0 | 2.0 | 4.0 | 8 |
