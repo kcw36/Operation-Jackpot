@@ -959,18 +959,46 @@ async function spin(){
   }
 
   // ── Cascade loop ──
+  // Each round: clusters first (pay & clear), then bombs detonate.
+  // Repeats until a full round produces neither clusters nor bombs.
   let round=0, anyAction=true;
+  const REEL_STAGGER=75, ROW_STAGGER=40, BLAST_DUR=460;
   while(anyAction){
     anyAction=false;
     round++;
 
-    // 1. Bombs — fire one at a time; re-scan after each cascade so
-    //    positions are always fresh. BOMB/SUPER_BOMB symbols are immune
-    //    to each other's blasts (like SCATTER) and survive to detonate
-    //    in a subsequent pass. Only the firing bomb's own cell is
-    //    self-cleared (it appears in its own bombCells footprint and is
-    //    explicitly NOT filtered out).
-    const REEL_STAGGER=75, ROW_STAGGER=40, BLAST_DUR=460;
+    // 1. Clusters — resolve before any bombs fire this round
+    const clusters=findClusters();
+    if(clusters.length>0){
+      anyAction=true;
+      const allCells=clusters.flatMap(c=>c.cells);
+
+      animCells(allCells,'anim-win',460);
+      sfxBreak();
+      await sleep(320);
+
+      let roundWin=0;
+      for(const c of clusters){
+        const sz=c.cells.length;
+        const basePay=getPay(c.sym,sz);
+        const multSum=c.cells.reduce((s,[r,row])=>s+G.mults[r][row],0);
+        roundWin+=basePay*G.bet*multSum;
+      }
+
+      for(const [r,row] of allCells){ G.mults[r][row]++; G.grid[r][row]=null; }
+      G.spinWin+=roundWin;
+
+      if(round===1) setLog(`${clusters.map(c=>`${SYM[c.sym].e}×${c.cells.length}`).join(' · ')} — WIN ${roundWin.toFixed(2)}`,true);
+      else          setLog(`CASCADE ${round-1} · WIN ${roundWin.toFixed(2)}`,true);
+
+      await cascadeDown(allCells);
+    }
+
+    // 2. Bombs — fire one at a time after clusters have resolved;
+    //    re-scan after each cascade so positions are always fresh.
+    //    BOMB/SUPER_BOMB symbols are immune to each other's blasts
+    //    (like SCATTER) and survive to detonate in a subsequent pass.
+    //    Only the firing bomb's own cell is self-cleared.
     let activeBombs=findBombs();
     while(activeBombs.length>0){
       anyAction=true;
@@ -1015,33 +1043,6 @@ async function spin(){
       await cascadeDown(clearedByBomb);
 
       activeBombs=findBombs(); // re-scan with updated positions
-    }
-
-    // 2. Clusters
-    const clusters=findClusters();
-    if(clusters.length>0){
-      anyAction=true;
-      const allCells=clusters.flatMap(c=>c.cells);
-
-      animCells(allCells,'anim-win',460);
-      sfxBreak();
-      await sleep(320);
-
-      let roundWin=0;
-      for(const c of clusters){
-        const sz=c.cells.length;
-        const basePay=getPay(c.sym,sz);
-        const multSum=c.cells.reduce((s,[r,row])=>s+G.mults[r][row],0);
-        roundWin+=basePay*G.bet*multSum;
-      }
-
-      for(const [r,row] of allCells){ G.mults[r][row]++; G.grid[r][row]=null; }
-      G.spinWin+=roundWin;
-
-      if(round===1) setLog(`${clusters.map(c=>`${SYM[c.sym].e}×${c.cells.length}`).join(' · ')} — WIN ${roundWin.toFixed(2)}`,true);
-      else          setLog(`CASCADE ${round-1} · WIN ${roundWin.toFixed(2)}`,true);
-
-      await cascadeDown(allCells);
     }
   }
 

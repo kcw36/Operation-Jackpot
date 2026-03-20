@@ -77,12 +77,12 @@ All game logic, animation, styling, and markup live in this one file. Do not spl
 - In free spins, BOMB does not spawn — SUPER_BOMB takes its slot with increased weight (3)
 
 ### Cascade Order (per round, repeats until no action)
-1. Detonate all bombs present on the current grid
-2. After each bomb detonation, immediately cascade (fill gaps, roll in new symbols)
-3. Find all qualifying clusters (5+), highlight and pay them
-4. Clear cluster cells, increment their multipliers
-5. Cascade down — existing symbols fall, new symbols roll in from top
-6. Repeat from step 1 until a full round produces no bombs and no clusters
+1. Find all qualifying clusters (5+), highlight and pay them
+2. Clear cluster cells, increment their multipliers
+3. Cascade down — existing symbols fall, new symbols roll in from top
+4. Detonate all bombs present (one at a time, leftmost/topmost first)
+5. After each bomb detonation, immediately cascade (fill gaps, roll in new symbols)
+6. Repeat from step 1 until a full round produces no clusters and no bombs
 
 ### Free Spins
 - **Trigger:** 3, 4, or 5 SCATTER symbols landing simultaneously on reels 2–5
