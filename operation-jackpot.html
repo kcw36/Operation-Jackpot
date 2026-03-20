@@ -363,8 +363,8 @@ h1 {
 // ═══════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════
-const HEIGHTS     = [4,5,6,6,5,4];
-const MAX_H       = Math.max(...HEIGHTS); // 6 — tallest reel, used for visual-row math
+const HEIGHTS     = [3,5,5,5,5,3];
+const MAX_H       = Math.max(...HEIGHTS); // tallest reel — used for visual-row math
 const REELS       = 6;
 const MIN_CLUSTER = 5;
 const STEP        = 70; // cell(68) + gap(2)
@@ -448,10 +448,20 @@ function getPay(sym,size) {
 // ═══════════════════════════════════════════
 function neighbors(reel,row) {
   const nb=[];
-  if(row>0)                              nb.push([reel,row-1]);
-  if(row<HEIGHTS[reel]-1)               nb.push([reel,row+1]);
-  if(reel>0      &&row<HEIGHTS[reel-1]) nb.push([reel-1,row]);
-  if(reel<REELS-1&&row<HEIGHTS[reel+1]) nb.push([reel+1,row]);
+  // Vertical: same reel, adjacent rows
+  if(row>0)               nb.push([reel,row-1]);
+  if(row<HEIGHTS[reel]-1) nb.push([reel,row+1]);
+  // Horizontal: adjacent reels at the same *visual* row (center-aligned grid).
+  // visualY = (MAX_H - HEIGHTS[r]) / 2 + row  →  invert to find neighbour's row index.
+  const visualY = (MAX_H - HEIGHTS[reel]) / 2 + row;
+  if(reel>0){
+    const nr = visualY - (MAX_H - HEIGHTS[reel-1]) / 2;
+    if(Number.isInteger(nr) && nr>=0 && nr<HEIGHTS[reel-1]) nb.push([reel-1,nr]);
+  }
+  if(reel<REELS-1){
+    const nr = visualY - (MAX_H - HEIGHTS[reel+1]) / 2;
+    if(Number.isInteger(nr) && nr>=0 && nr<HEIGHTS[reel+1]) nb.push([reel+1,nr]);
+  }
   return nb;
 }
 
