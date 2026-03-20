@@ -945,13 +945,17 @@ async function spin(){
         return true;
       });
 
-      // Sweep left→right, top→bottom
-      const sorted=[...blastCells]
-        .sort(([r1,ro1],[r2,ro2])=>r1!==r2?r1-r2:ro1-ro2);
+      // SUPER_BOMB: every cell fires at once (delay 0).
+      // Regular BOMB: radiates outward from the epicentre — delay grows
+      // with distance along the column (row axis) or the row (reel axis).
+      const cellDelay=([r,row])=>b.type==='SUPER_BOMB'?0
+          :r===b.reel
+            ?Math.abs(row-b.row)*ROW_STAGGER   // column — above/below bomb
+            :Math.abs(r-b.reel)*REEL_STAGGER;  // row    — left/right of bomb
       let maxDelay=0;
-      for(const [r,row] of sorted){
+      for(const [r,row] of blastCells){
         const el=getCellEl(r,row); if(!el) continue;
-        const d=r*REEL_STAGGER+row*ROW_STAGGER;
+        const d=cellDelay([r,row]);
         if(d>maxDelay) maxDelay=d;
         el.style.setProperty('--bomb-delay',`${d}ms`);
         el.classList.remove('anim-bomb','anim-win','block-drop');
