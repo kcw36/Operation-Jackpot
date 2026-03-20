@@ -278,6 +278,17 @@ h1 {
 .spin-btn:hover:not(:disabled) { background:#6dff88; box-shadow:0 0 32px rgba(77,255,110,0.5); }
 .spin-btn:disabled { opacity:0.35; cursor:not-allowed; }
 
+.bonus-btn {
+  font-family:'Russo One',sans-serif; font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase;
+  background:none; border:1px solid var(--amber-dim); color:var(--amber-dim);
+  border-radius:3px; padding:8px 13px; cursor:pointer; transition:all 0.15s;
+  display:flex; flex-direction:column; align-items:center; gap:3px; line-height:1;
+}
+.bonus-btn .bonus-cost { font-family:'Share Tech Mono',monospace; font-size:0.58rem; color:inherit; letter-spacing:0.08em; }
+.bonus-btn:hover:not(:disabled) { border-color:var(--amber); color:var(--amber); box-shadow:0 0 14px rgba(255,184,0,0.2); }
+.bonus-btn:disabled { opacity:0.35; cursor:not-allowed; }
+.bonus-btn.pending { border-color:var(--amber); color:var(--amber); box-shadow:0 0 16px rgba(255,184,0,0.35); animation:pulseBanner 1s ease-in-out infinite; }
+
 .log { font-size:0.72rem; color:var(--green-mid); letter-spacing:0.1em; text-align:center; min-height:18px; margin-top:4px; transition:color 0.3s; }
 .log.important { color:var(--amber); }
 
@@ -375,6 +386,10 @@ h1 {
     <button class="bet-btn" id="betUp">+</button>
   </div>
   <button class="spin-btn" id="spinBtn">▶ DEPLOY</button>
+  <button class="bonus-btn" id="bonusBuyBtn">
+    🎖 BUY BONUS
+    <span class="bonus-cost" id="bonusBuyCost">×80 — 80.00</span>
+  </button>
   <button class="aux-btn" id="infoBtn">ℹ INFO</button>
   <button class="aux-btn amber" id="resetBtn">↺ RESET</button>
 </div>
@@ -464,8 +479,9 @@ const PAY = {
   WILD:       {5:1.0,7:2.0,  9:4.0,  12:8.0,  15:20 },
 };
 
-const FS_TABLE  = {3:8,4:12,5:20};
-const BET_STEPS = [0.20,0.50,1.00,2.00,5.00,10.00,20.00,50.00];
+const FS_TABLE        = {3:8,4:12,5:20};
+const BET_STEPS       = [0.20,0.50,1.00,2.00,5.00,10.00,20.00,50.00];
+const BONUS_BUY_MULT  = 80; // cost = 80 × current bet
 
 // ═══════════════════════════════════════════
 //  STATE
@@ -474,7 +490,8 @@ let G = {
   balance:1000, bet:1.00, betIdx:2,
   grid:[], mults:[],
   freeSpins:0, inFS:false,
-  spinWin:0, sessionWin:0, busy:false,
+  spinWin:0, sessionWin:0,
+  busy:false, bonusBuyPending:false,
 };
 
 // ═══════════════════════════════════════════
@@ -678,6 +695,15 @@ function updateHUD(){
   document.getElementById('hTotalWin').textContent=G.sessionWin.toFixed(2);
   document.getElementById('fsNum').textContent    =G.freeSpins;
   document.getElementById('fsBanner').classList.toggle('on',G.inFS);
+  updateBonusBuyBtn();
+}
+
+function updateBonusBuyBtn(){
+  const cost=G.bet*BONUS_BUY_MULT;
+  document.getElementById('bonusBuyCost').textContent=`×${BONUS_BUY_MULT} — ${cost.toFixed(2)}`;
+  const btn=document.getElementById('bonusBuyBtn');
+  btn.disabled=G.busy||G.inFS||G.balance<cost||G.bonusBuyPending;
+  btn.classList.toggle('pending',G.bonusBuyPending);
 }
 
 function setLog(msg,important=false){
@@ -877,6 +903,23 @@ async function spin(){
   for(let r=0;r<REELS;r++)
     for(let row=0;row<HEIGHTS[r];row++)
       G.grid[r][row]=drawSym(r,G.inFS);
+
+  // ── Bonus buy: guarantee ≥ 3 scatters on reels 2–5 ──
+  if(G.bonusBuyPending&&!G.inFS){
+    G.bonusBuyPending=false;
+    // Collect non-scatter cells on eligible reels; count existing scatters
+    const eligible=[]; let have=0;
+    for(let r=1;r<=4;r++)
+      for(let row=0;row<HEIGHTS[r];row++)
+        G.grid[r][row]==='SCATTER' ? have++ : eligible.push([r,row]);
+    // Fisher-Yates shuffle the non-scatter cells, force enough to reach 3
+    for(let i=eligible.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [eligible[i],eligible[j]]=[eligible[j],eligible[i]];
+    }
+    for(let k=0;k<Math.max(0,3-have);k++) G.grid[eligible[k][0]][eligible[k][1]]='SCATTER';
+    updateBonusBuyBtn();
+  }
 
   setLog(G.inFS ? `🎖️ FREE SPIN ${G.freeSpins} REMAINING — DEPLOYING...` : 'DEPLOYING...');
 
@@ -1162,11 +1205,21 @@ function sfxClick(){
 document.getElementById('spinBtn').addEventListener('click',()=>{ sfxSpin(); spin(); });
 document.getElementById('betUp').addEventListener('click',()=>{
   sfxClick();
-  if(G.betIdx<BET_STEPS.length-1){G.betIdx++;G.bet=BET_STEPS[G.betIdx];document.getElementById('betVal').textContent=G.bet.toFixed(2);}
+  if(G.betIdx<BET_STEPS.length-1){G.betIdx++;G.bet=BET_STEPS[G.betIdx];document.getElementById('betVal').textContent=G.bet.toFixed(2);updateBonusBuyBtn();}
 });
 document.getElementById('betDown').addEventListener('click',()=>{
   sfxClick();
-  if(G.betIdx>0){G.betIdx--;G.bet=BET_STEPS[G.betIdx];document.getElementById('betVal').textContent=G.bet.toFixed(2);}
+  if(G.betIdx>0){G.betIdx--;G.bet=BET_STEPS[G.betIdx];document.getElementById('betVal').textContent=G.bet.toFixed(2);updateBonusBuyBtn();}
+});
+document.getElementById('bonusBuyBtn').addEventListener('click',()=>{
+  if(G.busy||G.inFS||G.bonusBuyPending) return;
+  const cost=G.bet*BONUS_BUY_MULT;
+  if(G.balance<cost){setLog('INSUFFICIENT FUNDS FOR BONUS BUY',true);return;}
+  sfxClick();
+  G.balance-=cost;
+  G.bonusBuyPending=true;
+  updateHUD();
+  setLog(`🎖 BONUS BUY CONFIRMED — SPIN TO DEPLOY ${3} SCATTERS!`,true);
 });
 document.getElementById('infoBtn').addEventListener('click',()=>{
   sfxClick();
