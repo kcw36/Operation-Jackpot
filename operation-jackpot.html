@@ -774,7 +774,7 @@ async function spin(){
     for(let row=0;row<HEIGHTS[r];row++)
       G.grid[r][row]=drawSym(r,G.inFS);
 
-  setLog('DEPLOYING...');
+  setLog(G.inFS ? `🎖️ FREE SPIN ${G.freeSpins} REMAINING — DEPLOYING...` : 'DEPLOYING...');
 
   // ── Drum spin — all 6 reels as one mechanical unit ──
   await doSpinAnimation();
@@ -790,12 +790,25 @@ async function spin(){
   if(sc===2) sfxScatterTension();
 
   // ── Scatter check ──
+  let justTriggeredFS=false;
   if(sc>=3){
+    // Flash every scatter cell before the announcement
+    const scCells=[];
+    for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) if(G.grid[r][row]==='SCATTER') scCells.push([r,row]);
+    animCells(scCells,'anim-win',1000);
+    sfxFSTrigger();
+    await sleep(400);
+
     const award=FS_TABLE[Math.min(sc,5)];
-    if(!G.inFS){ G.freeSpins+=award; G.inFS=true; setLog(`🚩 COMMAND POST — ${award} FREE SPINS!`,true); }
-    else        { G.freeSpins+=award;              setLog(`🚩 RETRIGGER — +${award} SPINS!`,true); }
+    if(!G.inFS){
+      G.freeSpins+=award; G.inFS=true; justTriggeredFS=true;
+      setLog(`🚩 COMMAND POST — ${award} FREE SPINS AWARDED!`,true);
+    } else {
+      G.freeSpins+=award;
+      setLog(`🚩 RETRIGGER — +${award} MORE SPINS!`,true);
+    }
     updateHUD();
-    await sleep(1400);
+    await sleep(1600);
   }
 
   // ── Cascade loop ──
@@ -861,7 +874,8 @@ async function spin(){
     setLog(`MISSION COMPLETE — SPIN WIN: ${G.spinWin.toFixed(2)}`);
   } else setLog('NO CLUSTERS FOUND. REDEPLOY.');
 
-  if(G.inFS){
+  // Only consume a free spin if this spin was already a free spin (not the triggering spin)
+  if(G.inFS&&!justTriggeredFS){
     G.freeSpins--;
     if(G.freeSpins<=0){
       G.inFS=false; G.freeSpins=0;
@@ -869,15 +883,21 @@ async function spin(){
       for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) updateCell(r,row);
       setLog('FREE SPINS COMPLETE — RETURNING TO BASE',true);
       updateHUD();
-      await sleep(1600);
+      await sleep(1800);
     }
   }
 
   updateHUD();
-  G.busy=false;
-  document.getElementById('spinBtn').disabled=false;
 
-  if(G.inFS&&G.freeSpins>0){ await sleep(600); spin(); }
+  // Keep the button locked and busy flag set during the inter-spin gap so
+  // player clicks cannot fire a duplicate spin during auto-play.
+  if(G.inFS&&G.freeSpins>0){
+    await sleep(650);
+    spin();
+  } else {
+    G.busy=false;
+    document.getElementById('spinBtn').disabled=false;
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -921,6 +941,30 @@ function sfxLand(){
   const hp=c.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=2200;
   const ng=c.createGain(); ng.gain.setValueAtTime(0.14,t); ng.gain.exponentialRampToValueAtTime(0.001,t+0.018);
   ns.connect(hp); hp.connect(ng); ng.connect(c.destination); ns.start(t);
+}
+
+// Free Spins trigger — four-note rising square-wave fanfare
+function sfxFSTrigger(){
+  const c=actx();
+  // Four ascending pitches, each with a brief attack + decay envelope
+  [330,415,523,659].forEach((freq,i)=>{
+    const t=c.currentTime+i*0.13;
+    const o=c.createOscillator(); o.type='square';
+    o.frequency.setValueAtTime(freq,t);
+    o.frequency.exponentialRampToValueAtTime(freq*1.04,t+0.10);
+    const g=c.createGain();
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(0.14,t+0.018);
+    g.gain.setValueAtTime(0.14,t+0.07);
+    g.gain.linearRampToValueAtTime(0,t+0.14);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+0.15);
+  });
+  // Trailing noise burst to punctuate
+  const nb=c.createBufferSource(); nb.buffer=_noise(c,0.12);
+  const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=900; bp.Q.value=0.8;
+  const ng=c.createGain(); const nt=c.currentTime+0.42;
+  ng.gain.setValueAtTime(0.22,nt); ng.gain.exponentialRampToValueAtTime(0.001,nt+0.12);
+  nb.connect(bp); bp.connect(ng); ng.connect(c.destination); nb.start(nt);
 }
 
 // Scatter tension — three ascending alert pulses when 2 scatters are visible
