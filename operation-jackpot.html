@@ -490,7 +490,7 @@ let G = {
   balance:1000, bet:1.00, betIdx:2,
   grid:[], mults:[],
   freeSpins:0, inFS:false,
-  spinWin:0, sessionWin:0,
+  spinWin:0, sessionWin:0, fsWin:0,
   busy:false, bonusBuyPending:false,
 };
 
@@ -948,7 +948,7 @@ async function spin(){
 
     const award=FS_TABLE[Math.min(sc,5)];
     if(!G.inFS){
-      G.freeSpins+=award; G.inFS=true; justTriggeredFS=true;
+      G.freeSpins+=award; G.inFS=true; justTriggeredFS=true; G.fsWin=0;
       setLog(`🚩 COMMAND POST — ${award} FREE SPINS AWARDED!`,true);
     } else {
       G.freeSpins+=award;
@@ -1049,9 +1049,15 @@ async function spin(){
   if(G.spinWin>0){
     G.balance+=G.spinWin; G.sessionWin+=G.spinWin;
     flashWin(G.spinWin);
-    showWinPopup(G.spinWin,G.bet);
-    setLog(`MISSION COMPLETE — SPIN WIN: ${G.spinWin.toFixed(2)}`);
-  } else setLog('NO CLUSTERS FOUND. REDEPLOY.');
+    if(G.inFS){
+      // During free spins: accumulate into session total, no per-spin popup
+      G.fsWin+=G.spinWin;
+      setLog(`FREE SPIN WIN: ${G.spinWin.toFixed(2)} · TOTAL: ${G.fsWin.toFixed(2)}`);
+    } else {
+      showWinPopup(G.spinWin,G.bet);
+      setLog(`MISSION COMPLETE — SPIN WIN: ${G.spinWin.toFixed(2)}`);
+    }
+  } else setLog(G.inFS ? 'NO WIN — REDEPLOYING...' : 'NO CLUSTERS FOUND. REDEPLOY.');
 
   // Only consume a free spin if this spin was already a free spin (not the triggering spin)
   if(G.inFS&&!justTriggeredFS){
@@ -1060,9 +1066,11 @@ async function spin(){
       G.inFS=false; G.freeSpins=0;
       G.mults=HEIGHTS.map(h=>Array(h).fill(1));
       for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) updateCell(r,row);
-      setLog('FREE SPINS COMPLETE — RETURNING TO BASE',true);
+      setLog(`🎖 FREE SPINS COMPLETE — TOTAL WIN: ${G.fsWin.toFixed(2)}`,true);
       updateHUD();
-      await sleep(1800);
+      if(G.fsWin>0) showWinPopup(G.fsWin,G.bet);
+      await sleep(2400);
+      G.fsWin=0;
     }
   }
 
