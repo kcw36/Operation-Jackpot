@@ -75,44 +75,37 @@ h1 {
 }
 .grid { display:flex; align-items:center; gap:4px; }
 
-/* ── REEL — the viewport window, clips the drum ── */
+/* ── REEL — column viewport ── */
 .reel {
-  position:relative; overflow:hidden;
-  /* edge-fade: simulates the drum curving away top and bottom */
-  -webkit-mask-image:linear-gradient(to bottom,
-    transparent 0%,rgba(0,0,0,0.4) 6%,black 14%,black 86%,rgba(0,0,0,0.4) 94%,transparent 100%);
-  mask-image:linear-gradient(to bottom,
-    transparent 0%,rgba(0,0,0,0.4) 6%,black 14%,black 86%,rgba(0,0,0,0.4) 94%,transparent 100%);
+  position:relative; overflow:visible;
 }
 
-/* ── REEL STRIP — the scrolling band inside the drum ── */
+/* ── REEL STRIP ── */
 .reel-strip {
   display:flex; flex-direction:column; gap:var(--gap);
-  will-change:transform;
 }
 
 /* ════════════════════════════════════
-   DRUM SPIN ANIMATION
-   The whole strip scrolls upward (drum
-   rotating forward), blurs at peak,
-   then decelerates and locks with a
-   tiny mechanical overshoot.
-   Stagger controlled via CSS vars.
+   BLOCK DROP ANIMATION
+   New symbols fall in as solid blocks
+   from above, staggered reel-by-reel
+   (left→right) then row-by-row
+   (top→bottom) within each reel.
+   Timing controlled via --drop-delay
+   and --drop-dur on each cell.
    ════════════════════════════════════ */
-@keyframes drumSpin {
-  0%   { transform:translateY(0px);    }
-  14%  { transform:translateY(-28px);  }
-  38%  { transform:translateY(-91px);  }
-  62%  { transform:translateY(-154px); }
-  79%  { transform:translateY(-112px); }
-  91%  { transform:translateY(-21px);  }
-  96%  { transform:translateY(5px);    }
-  100% { transform:translateY(0px);    }
+@keyframes blockDrop {
+  0%   { transform:translateY(-320px); opacity:0; }
+  18%  { opacity:1; }
+  56%  { transform:translateY(9px);  }
+  72%  { transform:translateY(-5px); }
+  84%  { transform:translateY(3px);  }
+  93%  { transform:translateY(-1px); }
+  100% { transform:translateY(0px);  opacity:1; }
 }
-
-.reel.spinning .reel-strip {
-  animation:drumSpin var(--spin-dur,750ms) var(--spin-delay,0ms)
-            cubic-bezier(0.22,0.8,0.48,1) both;
+.cell.block-drop {
+  animation:blockDrop var(--drop-dur,430ms) var(--drop-delay,0ms)
+            cubic-bezier(0.25,0.46,0.45,0.94) backwards;
 }
 
 /* ── CELL ── */
@@ -151,22 +144,6 @@ h1 {
   pointer-events:none;
 }
 
-/* ════════════════════════════════════
-   ROLL IN — new symbol dropping in
-   Slides down from above as the drum
-   advances, bounces gently into place
-   ════════════════════════════════════ */
-@keyframes rollIn {
-  0%   { transform:translateY(-72px) scaleY(0.12); filter:blur(10px); opacity:0.2; }
-  42%  { transform:translateY(6px)   scaleY(1.07); filter:blur(1px);  opacity:1; }
-  65%  { transform:translateY(-3px)  scaleY(0.97); filter:blur(0px);  opacity:1; }
-  82%  { transform:translateY(1px)   scaleY(1.01); }
-  100% { transform:translateY(0px)   scaleY(1);    filter:blur(0px);  opacity:1; }
-}
-.cell.roll-in {
-  animation:rollIn var(--roll-dur,420ms) var(--roll-delay,0ms)
-            cubic-bezier(0.34,1.18,0.64,1) both;
-}
 
 /* ════════════════════════════════════
    WIN / BOMB flashes
@@ -608,50 +585,35 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 // ═══════════════════════════════════════════
 
 /**
- * Drum spin on all 6 reels, staggered left→right.
- * Grid data must already be set before calling.
- * At ~62% of each reel's animation (peak blur) the cell
- * content is swapped invisibly, so the deceleration
- * phase reveals the new symbols settling in.
+ * Block-drop spin: every cell on the grid drops in from above as a
+ * solid block, staggered left→right by reel then top→bottom within
+ * each reel. Grid data must already be written to G.grid before calling.
  */
 function doSpinAnimation() {
-  const BASE_DUR   = 640;  // reel 0 duration (ms)
-  const STAGGER    = 95;   // each reel starts this many ms later
-  const EXTRA_DUR  = 75;   // each subsequent reel also runs a bit longer
-  const UPDATE_PCT = 0.62; // swap content at peak blur
+  const REEL_STAGGER = 65;  // ms between each reel starting
+  const CELL_STAGGER = 50;  // ms between cells within a reel (top→bottom)
+  const ANIM_DUR     = 430; // drop duration per cell
 
   return new Promise(resolve=>{
-    let lastFinish=0;
+    let maxFinish=0;
 
     for(let r=0;r<REELS;r++){
-      const delay  = r*STAGGER;
-      const dur    = BASE_DUR + r*EXTRA_DUR;
-      const reelEl = getReelEl(r);
-      const finishAt = delay+dur;
-      if(finishAt>lastFinish) lastFinish=finishAt;
-
-      // Schedule the invisible content swap at peak blur
-      setTimeout(()=>{
-        for(let row=0;row<HEIGHTS[r];row++) refreshCell(getCellEl(r,row),r,row);
-      }, delay + dur*UPDATE_PCT);
-
-      reelEl.style.setProperty('--spin-delay',`${delay}ms`);
-      reelEl.style.setProperty('--spin-dur',  `${dur}ms`);
+      for(let row=0;row<HEIGHTS[r];row++){
+        const el=getCellEl(r,row); if(!el) continue;
+        refreshCell(el,r,row);
+        const delay=r*REEL_STAGGER+row*CELL_STAGGER;
+        el.style.setProperty('--drop-delay',`${delay}ms`);
+        el.style.setProperty('--drop-dur',  `${ANIM_DUR}ms`);
+        el.classList.remove('block-drop','roll-out','anim-win','anim-bomb');
+        void el.offsetWidth;
+        el.classList.add('block-drop');
+        const finish=delay+ANIM_DUR;
+        if(finish>maxFinish) maxFinish=finish;
+        setTimeout(()=>el.classList.remove('block-drop'),finish+30);
+      }
     }
 
-    // Force reflow then kick off all animations
-    // (delay handled in CSS so they all "start" together but fire at offsets)
-    for(let r=0;r<REELS;r++){
-      const reelEl=getReelEl(r);
-      reelEl.classList.remove('spinning');
-      void reelEl.offsetWidth;
-      reelEl.classList.add('spinning');
-    }
-
-    setTimeout(()=>{
-      for(let r=0;r<REELS;r++) getReelEl(r).classList.remove('spinning');
-      resolve();
-    }, lastFinish+50);
+    setTimeout(resolve,maxFinish+20);
   });
 }
 
@@ -663,7 +625,7 @@ function rollOutCells(cells,dur=360) {
   return new Promise(resolve=>{
     for(const [r,row] of cells){
       const el=getCellEl(r,row); if(!el) continue;
-      el.classList.remove('roll-in','anim-win','anim-bomb');
+      el.classList.remove('block-drop','anim-win','anim-bomb');
       void el.offsetWidth;
       el.classList.add('roll-out');
       setTimeout(()=>el.classList.remove('roll-out'),dur+30);
@@ -673,9 +635,8 @@ function rollOutCells(cells,dur=360) {
 }
 
 /**
- * Roll in newly arrived cells from the top.
- * Cells in the same reel stagger top→bottom so they arrive
- * sequentially like the tape advancing.
+ * Drop in newly arrived cells from the top as solid blocks.
+ * Cells in the same reel stagger top→bottom.
  */
 function rollInCells(newCells) {
   return new Promise(resolve=>{
@@ -686,26 +647,26 @@ function rollInCells(newCells) {
     }
 
     let maxFinish=0;
-    const BASE_DUR=420;
-    const CELL_STAGGER=40; // ms between each symbol in a reel
+    const ANIM_DUR=420;
+    const CELL_STAGGER=45;
 
     for(const [rStr,rows] of Object.entries(byReel)){
       rows.sort((a,b)=>a-b); // top row first
       rows.forEach((row,i)=>{
         const el=getCellEl(parseInt(rStr),row); if(!el) return;
         const delay=i*CELL_STAGGER;
-        el.style.setProperty('--roll-delay',`${delay}ms`);
-        el.style.setProperty('--roll-dur',  `${BASE_DUR}ms`);
-        el.classList.remove('roll-out','anim-win','anim-bomb');
+        el.style.setProperty('--drop-delay',`${delay}ms`);
+        el.style.setProperty('--drop-dur',  `${ANIM_DUR}ms`);
+        el.classList.remove('roll-out','anim-win','anim-bomb','block-drop');
         void el.offsetWidth;
-        el.classList.add('roll-in');
-        const finish=delay+BASE_DUR;
+        el.classList.add('block-drop');
+        const finish=delay+ANIM_DUR;
         if(finish>maxFinish) maxFinish=finish;
-        setTimeout(()=>el.classList.remove('roll-in'),finish+30);
+        setTimeout(()=>el.classList.remove('block-drop'),finish+30);
       });
     }
 
-    setTimeout(resolve, maxFinish+20);
+    setTimeout(resolve,maxFinish+20);
   });
 }
 
