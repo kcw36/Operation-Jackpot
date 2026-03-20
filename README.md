@@ -96,10 +96,12 @@ The game is intentionally kept as a single self-contained file for maximum porta
 
 ## Roadmap
 
+- [ ] **Scatter Polish** — scatter symbol to use identical block-drop animation and multiplier display as regular symbols
+- [ ] **Free Spins Mode** — 3/4/5 scatters trigger 8/12/20 free spins; multipliers accumulate; bombs replaced by super bombs
+- [ ] **Win Messages** — thematic overlay text scaled to win size ("GOOD HIT" → "TOTAL ANNIHILATION")
 - [ ] **Python RTP Simulation** — simulate 10M+ spins to verify return-to-player, hit frequency, and cascade depth distribution
+- [ ] **RTP Fine-Tuning** — adjust symbol weights and paytable values to hit target RTP (~95%)
 - [ ] **Buy Bonus** — purchase direct free spins entry at a fixed cost multiplier
-- [ ] **Win Celebrations** — big win / mega win / ultra win screens at 20×, 50×, 100× bet thresholds
-- [ ] **Sound Design** — Web Audio API integration (spin, land, cluster win, bomb detonation, free spins fanfare)
 - [ ] **Mobile Layout** — responsive scaling for smaller screens
 
 ---

@@ -17,7 +17,7 @@ All game logic, animation, styling, and markup live in this one file. Do not spl
 ## Game Spec (Source of Truth)
 
 ### Grid
-- **6 reels**, heights: `[4, 5, 6, 6, 5, 4]` (diamond/symmetric shape)
+- **6 reels**, heights: `[3, 5, 5, 5, 5, 3]` (diamond/symmetric shape)
 - **Cluster pays** — wins require 5 or more connected matching symbols
 - **Connectivity** — horizontal and vertical only (no diagonal)
 - **Cascade** — when symbols are cleared, remaining symbols fall down; new symbols are drawn randomly from a weighted pool to fill gaps from the top
@@ -172,15 +172,35 @@ const BET_STEPS = [0.20, 0.50, 1.00, 2.00, 5.00, 10.00, 20.00, 50.00];
 
 ## Planned Next Steps (in priority order)
 
-1. **Python RTP Simulation** — a separate `rtp_sim.py` script that simulates N spins (target: 10M+) and reports RTP, hit frequency, average win, max win, free spins trigger rate, cascade depth distribution, and multiplier value distribution. Should mirror the JS logic exactly.
+1. **Scatter Visual Fix** — SCATTER (`🚩`) currently renders differently from regular symbols (no block-drop animation, no multiplier badge). Make it behave identically to other symbols visually: same cell styling, same drop animation on spin, same multiplier display. The only scatter-specific behaviour is: it cannot be cleared by bombs; it contributes to the free spins trigger count; it does not form clusters.
 
-2. **Buy Bonus** — a button that lets the player purchase direct free spins entry at a fixed cost multiplier (typically 80–100× bet).
+2. **Free Spins Trigger** — trigger a free spins bonus game when 3, 4, or 5 scatter symbols land simultaneously on reels 2–5 (index 1–4):
+   - 3 scatters → 8 free spins
+   - 4 scatters → 12 free spins
+   - 5 scatters → 20 free spins
+   - Retrigger: 3+ scatters during free spins adds the same amounts
+   - During free spins: BOMB is removed from the pool; SUPER_BOMB weight increases to 3
+   - Multipliers carry over from the triggering spin and accumulate for the full session
+   - Free spins run automatically with a short delay between each spin
+   - Multipliers reset to `1×` when the session ends
+   - Note: `sfxScatterTension()` already plays when 2 scatters are visible — keep this behaviour
 
-3. **Win Presentation** — big win / mega win / ultra win screens with thematic animations when spin win exceeds certain multiples of bet (e.g. 20×, 50×, 100×).
+3. **Win Pop-up Message** — after each spin's total win is resolved, display a thematic message overlay based on the win as a multiple of bet:
+   - < 2× bet: no message (silent win, just update balance)
+   - 2–9× bet: "GOOD HIT" (or similar low-tier phrase)
+   - 10–24× bet: "DIRECT HIT"
+   - 25–49× bet: "CRITICAL STRIKE"
+   - 50–99× bet: "DEVASTATING BLOW"
+   - 100×+ bet: "TOTAL ANNIHILATION"
+   - Style consistently with the military terminal aesthetic; animate in/out; do not block the next spin button for longer than ~2.5 seconds
 
-4. **Sound** — Web Audio API: reel spin (mechanical whirr), symbol land (thud), cluster win (explosion burst), bomb detonation, free spins fanfare.
+4. **Python RTP Simulation** — a separate `rtp_sim.py` script that simulates N spins (target: 10M+) and reports RTP, hit frequency, average win, max win, free spins trigger rate, cascade depth distribution, and multiplier value distribution. Should mirror the JS logic exactly (same HEIGHTS, weights, paytable, cluster detection, bomb mechanics, cascade loop, multiplier system, free spins rules).
 
-5. **Mobile layout** — responsive scaling so the grid fits smaller screens without scrolling.
+5. **RTP Fine-Tuning** — after running the simulation, adjust symbol weights and/or paytable values to hit a target RTP (typically 94–97% for slots of this type). Document the final tuned values in this file and in the paytable HTML.
+
+6. **Buy Bonus** — a button that lets the player purchase direct free spins entry at a fixed cost multiplier (typically 80–100× bet).
+
+7. **Mobile layout** — responsive scaling so the grid fits smaller screens without scrolling.
 
 ---
 

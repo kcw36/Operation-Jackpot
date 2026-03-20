@@ -70,10 +70,25 @@ h1 {
 /* ── GRID WRAP ── */
 .grid-wrap {
   position:relative; background:var(--panel); border:1px solid var(--border);
-  border-radius:4px; padding:14px;
+  border-radius:4px; padding:14px; overflow:hidden;
   box-shadow:0 0 40px rgba(77,255,110,0.07),inset 0 0 60px rgba(0,0,0,0.4);
 }
 .grid { display:flex; align-items:center; gap:4px; }
+
+/* ── CORNER BRICKS — decorative blocks in outer-reel gaps ── */
+.reel-col { position:relative; flex-shrink:0; }
+.brick-block {
+  position:absolute; bottom:0; left:0; width:var(--cell);
+  background:#0b170a;
+  border:1px solid var(--border); border-radius:2px;
+  background-image:
+    repeating-linear-gradient(135deg,
+      rgba(30,58,18,0.55) 0px, rgba(30,58,18,0.55) 1px,
+      transparent 1px, transparent 10px),
+    repeating-linear-gradient(45deg,
+      rgba(30,58,18,0.55) 0px, rgba(30,58,18,0.55) 1px,
+      transparent 1px, transparent 10px);
+}
 
 /* ── REEL — column viewport ── */
 .reel {
@@ -122,7 +137,7 @@ h1 {
   position:absolute; bottom:2px; right:4px; font-size:0.55rem; color:var(--amber);
   font-family:'Share Tech Mono',monospace; z-index:2; line-height:1;
 }
-.cell .mult:empty { display:none; }
+.cell[data-m="1"] .mult { opacity:0.25; }
 .cell[data-m="2"]  { border-color:#2a5a18; }
 .cell[data-m="3"]  { border-color:#3a7a22; background:#0d1e0b; }
 .cell[data-m="4"]  { border-color:#4aaa2a; background:#0f2410; }
@@ -536,7 +551,32 @@ function renderGrid() {
     strip.className='reel-strip'; strip.id=`strip-${r}`;
     for(let row=0;row<HEIGHTS[r];row++) strip.appendChild(buildCell(r,row));
     reelEl.appendChild(strip);
-    container.appendChild(reelEl);
+
+    if(r===0||r===REELS-1){
+      // Wrap outer reels in a full-height column so the gap below can
+      // hold a decorative brick block in the bottom corner.
+      const colH    = MAX_H*STEP-2;                    // 348px — matches inner reel height
+      const reelTop = (MAX_H-HEIGHTS[r])/2*STEP;       // 70px — center-align offset
+      const brickH  = colH-(reelTop+(HEIGHTS[r]*STEP-2)+2); // 68px — one cell height
+
+      const colEl=document.createElement('div');
+      colEl.className='reel-col';
+      colEl.style.cssText=`width:var(--cell);height:${colH}px;`;
+
+      reelEl.style.position='absolute';
+      reelEl.style.top=`${reelTop}px`;
+      reelEl.style.left='0';
+
+      const brickEl=document.createElement('div');
+      brickEl.className='brick-block';
+      brickEl.style.height=`${brickH}px`;
+
+      colEl.appendChild(reelEl);
+      colEl.appendChild(brickEl);
+      container.appendChild(colEl);
+    } else {
+      container.appendChild(reelEl);
+    }
   }
 }
 
@@ -549,7 +589,7 @@ function buildCell(r,row) {
 
 function refreshCell(el,r,row) {
   const sym=G.grid[r][row], m=G.mults[r][row];
-  el.innerHTML=`<span class="sym">${sym?SYM[sym].e:''}</span><span class="mult">${m>1?m+'×':''}</span>`;
+  el.innerHTML=`<span class="sym">${sym?SYM[sym].e:''}</span><span class="mult">${m}×</span>`;
   el.dataset.m=m>=10?'hi':m>=4?'4':m>=3?'3':m>=2?'2':'1';
   el.classList.toggle('is-scatter',sym==='SCATTER');
 }
@@ -611,6 +651,8 @@ function doSpinAnimation() {
         if(finish>maxFinish) maxFinish=finish;
         setTimeout(()=>el.classList.remove('block-drop'),finish+30);
       }
+      // Land sound fires as the reel's last cell settles (~55% through its animation)
+      setTimeout(sfxLand, r*REEL_STAGGER+(HEIGHTS[r]-1)*CELL_STAGGER+Math.round(ANIM_DUR*0.55));
     }
 
     setTimeout(resolve,maxFinish+20);
@@ -664,6 +706,8 @@ function rollInCells(newCells) {
         if(finish>maxFinish) maxFinish=finish;
         setTimeout(()=>el.classList.remove('block-drop'),finish+30);
       });
+      // Land sound for this reel's last new cell settling
+      setTimeout(sfxLand,(rows.length-1)*CELL_STAGGER+Math.round(ANIM_DUR*0.55));
     }
 
     setTimeout(resolve,maxFinish+20);
@@ -689,12 +733,14 @@ async function cascadeDown(clearedCells){
   // 2. Compact non-null symbols to bottom, draw new ones for top
   const newCells=[];
   for(let r=0;r<REELS;r++){
-    const kept   =G.grid[r].map((s,i)=>[s,G.mults[r][i]]).filter(([s])=>s!==null);
-    const dropped=HEIGHTS[r]-kept.length;
+    const all    =G.grid[r].map((s,i)=>[s,G.mults[r][i]]);
+    const cleared=all.filter(([s])=>s===null);
+    const kept   =all.filter(([s])=>s!==null);
+    const dropped=cleared.length;
     if(dropped<=0) continue;
     const fresh=Array.from({length:dropped},()=>drawSym(r,G.inFS));
     G.grid[r] =[...fresh,...kept.map(([s])=>s)];
-    G.mults[r]=[...Array(dropped).fill(1),...kept.map(([,m])=>m)];
+    G.mults[r]=[...cleared.map(([,m])=>m),...kept.map(([,m])=>m)];
     for(let i=0;i<dropped;i++) newCells.push([r,i]);
   }
 
@@ -739,8 +785,11 @@ async function spin(){
 
   await sleep(80);
 
-  // ── Scatter check ──
+  // ── Scatter tension (2 scatters visible = near-miss tease) ──
   const sc=countScatters();
+  if(sc===2) sfxScatterTension();
+
+  // ── Scatter check ──
   if(sc>=3){
     const award=FS_TABLE[Math.min(sc,5)];
     if(!G.inFS){ G.freeSpins+=award; G.inFS=true; setLog(`🚩 COMMAND POST — ${award} FREE SPINS!`,true); }
@@ -762,14 +811,18 @@ async function spin(){
       for(const b of bombs){
         const cells=bombCells(b);
         setLog(`${b.type==='SUPER_BOMB'?'☢️ SUPER BOMB':'💣 BOMB'} DETONATED!`,true);
+        sfxBomb();
         animCells([[b.reel,b.row]],'anim-bomb',520);
         await sleep(180);
-        animCells(cells,'anim-bomb',460);
+        // Scatter symbols survive bomb blasts — filter them out before clearing
+        const blastCells=cells.filter(([r,row])=>G.grid[r][row]!=='SCATTER');
+        animCells(blastCells,'anim-bomb',460);
         await sleep(250);
-        for(const [r,row] of cells){
-          if(G.grid[r][row]!==null){ G.mults[r][row]++; G.grid[r][row]=null; }
+        const clearedByBomb=[];
+        for(const [r,row] of blastCells){
+          if(G.grid[r][row]!==null){ G.mults[r][row]++; G.grid[r][row]=null; clearedByBomb.push([r,row]); }
         }
-        await cascadeDown(cells);
+        await cascadeDown(clearedByBomb);
       }
     }
 
@@ -780,6 +833,7 @@ async function spin(){
       const allCells=clusters.flatMap(c=>c.cells);
 
       animCells(allCells,'anim-win',460);
+      sfxBreak();
       await sleep(320);
 
       let roundWin=0;
@@ -827,25 +881,126 @@ async function spin(){
 }
 
 // ═══════════════════════════════════════════
+//  AUDIO — Web Audio API synthesised SFX
+// ═══════════════════════════════════════════
+let _actx=null;
+function actx(){
+  if(!_actx) _actx=new(window.AudioContext||window.webkitAudioContext)();
+  if(_actx.state==='suspended') _actx.resume();
+  return _actx;
+}
+function _noise(c,dur){
+  const b=c.createBuffer(1,Math.ceil(c.sampleRate*dur),c.sampleRate);
+  const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b;
+}
+
+// Block breaking — crack + low thud (cluster clear / bomb blast)
+function sfxBreak(){
+  const c=actx(),t=c.currentTime;
+  // Crack: bandpass noise burst
+  const ns=c.createBufferSource(); ns.buffer=_noise(c,0.1);
+  const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1100; bp.Q.value=0.7;
+  const ng=c.createGain(); ng.gain.setValueAtTime(0.38,t); ng.gain.exponentialRampToValueAtTime(0.001,t+0.1);
+  ns.connect(bp); bp.connect(ng); ng.connect(c.destination); ns.start(t);
+  // Thud: low sine sweep
+  const o=c.createOscillator();
+  o.frequency.setValueAtTime(110,t); o.frequency.exponentialRampToValueAtTime(26,t+0.17);
+  const og=c.createGain(); og.gain.setValueAtTime(0.52,t); og.gain.exponentialRampToValueAtTime(0.001,t+0.17);
+  o.connect(og); og.connect(c.destination); o.start(t); o.stop(t+0.17);
+}
+
+// Block landing — satisfying thud as a symbol settles
+function sfxLand(){
+  const c=actx(),t=c.currentTime;
+  const o=c.createOscillator(); o.type='sine';
+  o.frequency.setValueAtTime(170,t); o.frequency.exponentialRampToValueAtTime(48,t+0.11);
+  const g=c.createGain(); g.gain.setValueAtTime(0.28,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.11);
+  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+0.11);
+  // High transient click
+  const ns=c.createBufferSource(); ns.buffer=_noise(c,0.018);
+  const hp=c.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=2200;
+  const ng=c.createGain(); ng.gain.setValueAtTime(0.14,t); ng.gain.exponentialRampToValueAtTime(0.001,t+0.018);
+  ns.connect(hp); hp.connect(ng); ng.connect(c.destination); ns.start(t);
+}
+
+// Scatter tension — three ascending alert pulses when 2 scatters are visible
+function sfxScatterTension(){
+  const c=actx();
+  [0,0.21,0.40].forEach((delay,i)=>{
+    const t=c.currentTime+delay;
+    const o=c.createOscillator(); o.type='square'; o.frequency.value=360+i*130;
+    const g=c.createGain();
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.11,t+0.012);
+    g.gain.setValueAtTime(0.11,t+0.08); g.gain.linearRampToValueAtTime(0,t+0.13);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+0.14);
+  });
+}
+
+// Bomb detonation — deep distorted boom + low noise rumble
+function sfxBomb(){
+  const c=actx(),t=c.currentTime;
+  // Distorted sawtooth sweep
+  const o=c.createOscillator(); o.type='sawtooth';
+  o.frequency.setValueAtTime(88,t); o.frequency.exponentialRampToValueAtTime(16,t+0.55);
+  const dist=c.createWaveShaper();
+  const cv=new Float32Array(256);
+  for(let i=0;i<256;i++){const x=i*2/255-1; cv[i]=x<0?-Math.pow(-x,0.65):Math.pow(x,0.65);} dist.curve=cv;
+  const og=c.createGain(); og.gain.setValueAtTime(0.68,t); og.gain.exponentialRampToValueAtTime(0.001,t+0.55);
+  o.connect(dist); dist.connect(og); og.connect(c.destination); o.start(t); o.stop(t+0.55);
+  // Low noise rumble
+  const ns=c.createBufferSource(); ns.buffer=_noise(c,0.45);
+  const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=240;
+  const ng=c.createGain(); ng.gain.setValueAtTime(0.55,t); ng.gain.exponentialRampToValueAtTime(0.001,t+0.45);
+  ns.connect(lp); lp.connect(ng); ng.connect(c.destination); ns.start(t);
+}
+
+// Deploy/spin button — sharp rising square + click
+function sfxSpin(){
+  const c=actx(),t=c.currentTime;
+  const o=c.createOscillator(); o.type='square';
+  o.frequency.setValueAtTime(290,t); o.frequency.exponentialRampToValueAtTime(580,t+0.065);
+  const g=c.createGain(); g.gain.setValueAtTime(0.17,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.1);
+  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+0.1);
+  const ns=c.createBufferSource(); ns.buffer=_noise(c,0.022);
+  const hp=c.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=3000;
+  const ng=c.createGain(); ng.gain.setValueAtTime(0.22,t); ng.gain.exponentialRampToValueAtTime(0.001,t+0.022);
+  ns.connect(hp); hp.connect(ng); ng.connect(c.destination); ns.start(t);
+}
+
+// Generic UI button — soft filtered click
+function sfxClick(){
+  const c=actx(),t=c.currentTime;
+  const ns=c.createBufferSource(); ns.buffer=_noise(c,0.016);
+  const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1700; bp.Q.value=1.4;
+  const g=c.createGain(); g.gain.setValueAtTime(0.17,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.016);
+  ns.connect(bp); bp.connect(g); g.connect(c.destination); ns.start(t);
+}
+
+// ═══════════════════════════════════════════
 //  CONTROLS
 // ═══════════════════════════════════════════
-document.getElementById('spinBtn').addEventListener('click',spin);
+document.getElementById('spinBtn').addEventListener('click',()=>{ sfxSpin(); spin(); });
 document.getElementById('betUp').addEventListener('click',()=>{
+  sfxClick();
   if(G.betIdx<BET_STEPS.length-1){G.betIdx++;G.bet=BET_STEPS[G.betIdx];document.getElementById('betVal').textContent=G.bet.toFixed(2);}
 });
 document.getElementById('betDown').addEventListener('click',()=>{
+  sfxClick();
   if(G.betIdx>0){G.betIdx--;G.bet=BET_STEPS[G.betIdx];document.getElementById('betVal').textContent=G.bet.toFixed(2);}
 });
 document.getElementById('infoBtn').addEventListener('click',()=>{
+  sfxClick();
   document.getElementById('infoModal').classList.add('open');
 });
 document.getElementById('infoClose').addEventListener('click',()=>{
+  sfxClick();
   document.getElementById('infoModal').classList.remove('open');
 });
 document.getElementById('infoModal').addEventListener('click',e=>{
-  if(e.target===e.currentTarget) e.currentTarget.classList.remove('open');
+  if(e.target===e.currentTarget){ sfxClick(); e.currentTarget.classList.remove('open'); }
 });
 document.getElementById('resetBtn').addEventListener('click',()=>{
+  sfxClick();
   G.balance=1000; G.sessionWin=0; updateHUD();
   setLog('BALANCE RESET — READY FOR DEPLOYMENT');
 });
