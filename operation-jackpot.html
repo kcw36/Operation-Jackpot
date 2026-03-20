@@ -702,7 +702,7 @@ function updateBonusBuyBtn(){
   const cost=G.bet*BONUS_BUY_MULT;
   document.getElementById('bonusBuyCost').textContent=`×${BONUS_BUY_MULT} — ${cost.toFixed(2)}`;
   const btn=document.getElementById('bonusBuyBtn');
-  btn.disabled=G.busy||G.inFS||G.balance<cost||G.bonusBuyPending;
+  btn.disabled=G.busy||G.inFS||G.balance<(cost+G.bet)||G.bonusBuyPending;
   btn.classList.toggle('pending',G.bonusBuyPending);
 }
 
@@ -1087,6 +1087,7 @@ async function spin(){
   } else {
     G.busy=false;
     document.getElementById('spinBtn').disabled=false;
+    updateBonusBuyBtn();
   }
 }
 
@@ -1225,12 +1226,11 @@ document.getElementById('betDown').addEventListener('click',()=>{
 document.getElementById('bonusBuyBtn').addEventListener('click',()=>{
   if(G.busy||G.inFS||G.bonusBuyPending) return;
   const cost=G.bet*BONUS_BUY_MULT;
-  if(G.balance<cost){setLog('INSUFFICIENT FUNDS FOR BONUS BUY',true);return;}
-  sfxClick();
+  if(G.balance<cost+G.bet){setLog('INSUFFICIENT FUNDS FOR BONUS BUY',true);return;}
+  sfxSpin();
   G.balance-=cost;
   G.bonusBuyPending=true;
-  updateHUD();
-  setLog(`🎖 BONUS BUY CONFIRMED — SPIN TO DEPLOY ${3} SCATTERS!`,true);
+  spin();
 });
 document.getElementById('infoBtn').addEventListener('click',()=>{
   sfxClick();
