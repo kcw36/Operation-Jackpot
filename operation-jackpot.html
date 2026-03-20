@@ -1068,9 +1068,12 @@ async function spin(){
 
   updateHUD();
 
-  // Keep the button locked and busy flag set during the inter-spin gap so
-  // player clicks cannot fire a duplicate spin during auto-play.
   if(G.inFS&&G.freeSpins>0){
+    // Release the busy guard so the recursive spin() call can pass the
+    // if(G.busy) return check at the top. The spin button stays physically
+    // disabled (set at spin start, never re-enabled in the FS path) so
+    // manual clicks during the inter-spin gap are still blocked.
+    G.busy=false;
     await sleep(650);
     spin();
   } else {
