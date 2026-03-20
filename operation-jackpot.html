@@ -88,7 +88,7 @@ h1 {
 /* ── REEL STRIP — the scrolling band inside the drum ── */
 .reel-strip {
   display:flex; flex-direction:column; gap:var(--gap);
-  will-change:transform,filter;
+  will-change:transform;
 }
 
 /* ════════════════════════════════════
@@ -100,14 +100,14 @@ h1 {
    Stagger controlled via CSS vars.
    ════════════════════════════════════ */
 @keyframes drumSpin {
-  0%   { transform:translateY(0px);    filter:blur(0px);   }
-  14%  { transform:translateY(-28px);  filter:blur(3px);   }
-  38%  { transform:translateY(-91px);  filter:blur(9px);   }
-  62%  { transform:translateY(-154px); filter:blur(14px);  }
-  79%  { transform:translateY(-112px); filter:blur(8px);   }
-  91%  { transform:translateY(-21px);  filter:blur(2.5px); }
-  96%  { transform:translateY(5px);    filter:blur(0.4px); }
-  100% { transform:translateY(0px);    filter:blur(0px);   }
+  0%   { transform:translateY(0px);    }
+  14%  { transform:translateY(-28px);  }
+  38%  { transform:translateY(-91px);  }
+  62%  { transform:translateY(-154px); }
+  79%  { transform:translateY(-112px); }
+  91%  { transform:translateY(-21px);  }
+  96%  { transform:translateY(5px);    }
+  100% { transform:translateY(0px);    }
 }
 
 .reel.spinning .reel-strip {
@@ -446,7 +446,15 @@ function bombCells(b) {
   if(b.type==='SUPER_BOMB'){
     for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) set.add(k(r,row));
   } else {
-    for(let r=0;r<REELS;r++)          if(b.row<HEIGHTS[r])     set.add(k(r,b.row));
+    // Horizontal row: find cells at the same *visual* height across all reels.
+    // The grid is bottom-aligned, so visual-from-bottom = HEIGHTS[r]-1-row.
+    // For a bomb at [b.reel, b.row], target visual depth = HEIGHTS[b.reel]-1-b.row.
+    const visualFromBottom = HEIGHTS[b.reel] - 1 - b.row;
+    for(let r=0;r<REELS;r++){
+      const row = HEIGHTS[r] - 1 - visualFromBottom;
+      if(row>=0 && row<HEIGHTS[r]) set.add(k(r,row));
+    }
+    // Vertical column: every cell in the bomb's reel
     for(let row=0;row<HEIGHTS[b.reel];row++) set.add(k(b.reel,row));
   }
   return [...set].map(s=>s.split(',').map(Number));
