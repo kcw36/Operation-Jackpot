@@ -931,31 +931,8 @@ async function spin(){
 
   await sleep(80);
 
-  // ── Scatter tension (2 scatters visible = near-miss tease) ──
-  const sc=countScatters();
-  if(sc===2) sfxScatterTension();
-
-  // ── Scatter check ──
-  let justTriggeredFS=false;
-  if(sc>=3){
-    // Flash every scatter cell before the announcement
-    const scCells=[];
-    for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) if(G.grid[r][row]==='SCATTER') scCells.push([r,row]);
-    animCells(scCells,'anim-win',1000);
-    sfxFSTrigger();
-    await sleep(400);
-
-    const award=FS_TABLE[Math.min(sc,5)];
-    if(!G.inFS){
-      G.freeSpins+=award; G.inFS=true; justTriggeredFS=true; G.fsWin=0;
-      setLog(`🚩 COMMAND POST — ${award} FREE SPINS AWARDED!`,true);
-    } else {
-      G.freeSpins+=award;
-      setLog(`🚩 RETRIGGER — +${award} MORE SPINS!`,true);
-    }
-    updateHUD();
-    await sleep(1600);
-  }
+  // ── Scatter tension (2 scatters visible on initial drop = near-miss tease) ──
+  if(countScatters()===2) sfxScatterTension();
 
   // ── Cascade loop ──
   // Each round: clusters first (pay & clear), then bombs detonate.
@@ -1043,6 +1020,29 @@ async function spin(){
 
       activeBombs=findBombs(); // re-scan with updated positions
     }
+  }
+
+  // ── Scatter check (after all cascades so dropped-in scatters are counted) ──
+  let justTriggeredFS=false;
+  const sc=countScatters();
+  if(sc>=3){
+    // Flash every scatter cell before the announcement
+    const scCells=[];
+    for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) if(G.grid[r][row]==='SCATTER') scCells.push([r,row]);
+    animCells(scCells,'anim-win',1000);
+    sfxFSTrigger();
+    await sleep(400);
+
+    const award=FS_TABLE[Math.min(sc,5)];
+    if(!G.inFS){
+      G.freeSpins+=award; G.inFS=true; justTriggeredFS=true; G.fsWin=0;
+      setLog(`🚩 COMMAND POST — ${award} FREE SPINS AWARDED!`,true);
+    } else {
+      G.freeSpins+=award;
+      setLog(`🚩 RETRIGGER — +${award} MORE SPINS!`,true);
+    }
+    updateHUD();
+    await sleep(1600);
   }
 
   // ── Resolve ──
