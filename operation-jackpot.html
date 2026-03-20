@@ -243,7 +243,7 @@ h1 {
   55%  { transform:scale(0.88); background:#ffbb00; opacity:0.65; }
   100% { transform:scale(1);    background:#0b170a; opacity:1; }
 }
-.cell.anim-bomb { animation:cellBomb 0.52s ease-out; }
+.cell.anim-bomb { animation:cellBomb 0.48s var(--bomb-delay,0ms) ease-out both; }
 
 @keyframes scatter-pulse {
   0%,100% { text-shadow:0 0 6px rgba(255,80,50,0.5); }
@@ -938,16 +938,30 @@ async function spin(){
                       bombs.length>1?`💣 ${bombs.length}× BOMBS`:'💣 BOMB';
       setLog(`${bombLabel} DETONATED!`,true);
       sfxBomb();
-      animCells(bombs.map(b=>[b.reel,b.row]),'anim-bomb',520);
-      await sleep(180);
 
       // SCATTER survives; everything else (including the bombs themselves,
       // which appear in their own bombCells footprint) is cleared.
       const blastCells=[...blastMap.values()]
         .filter(([r,row])=>G.grid[r][row]!=='SCATTER');
 
-      animCells(blastCells,'anim-bomb',460);
-      await sleep(250);
+      // Detonate left→right (reel index) then top→bottom (row index).
+      // Each cell gets a CSS --bomb-delay so the explosion sweeps across
+      // the grid as a wave rather than all firing at once.
+      const REEL_STAGGER=75, ROW_STAGGER=40, BLAST_DUR=460;
+      const sorted=[...blastCells]
+        .sort(([r1,ro1],[r2,ro2])=>r1!==r2 ? r1-r2 : ro1-ro2);
+      let maxDelay=0;
+      for(const [r,row] of sorted){
+        const el=getCellEl(r,row); if(!el) continue;
+        const d=r*REEL_STAGGER+row*ROW_STAGGER;
+        if(d>maxDelay) maxDelay=d;
+        el.style.setProperty('--bomb-delay',`${d}ms`);
+        el.classList.remove('anim-bomb','anim-win','block-drop');
+        void el.offsetWidth;
+        el.classList.add('anim-bomb');
+        setTimeout(()=>{ el.style.removeProperty('--bomb-delay'); el.classList.remove('anim-bomb'); },d+BLAST_DUR+30);
+      }
+      await sleep(maxDelay+BLAST_DUR);
 
       const clearedByBomb=[];
       for(const [r,row] of blastCells){
