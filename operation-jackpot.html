@@ -73,7 +73,7 @@ h1 {
   border-radius:4px; padding:14px;
   box-shadow:0 0 40px rgba(77,255,110,0.07),inset 0 0 60px rgba(0,0,0,0.4);
 }
-.grid { display:flex; align-items:flex-end; gap:4px; }
+.grid { display:flex; align-items:center; gap:4px; }
 
 /* ── REEL — the viewport window, clips the drum ── */
 .reel {
@@ -222,18 +222,59 @@ h1 {
 .log { font-size:0.72rem; color:var(--green-mid); letter-spacing:0.1em; text-align:center; min-height:18px; margin-top:4px; transition:color 0.3s; }
 .log.important { color:var(--amber); }
 
-.legend { display:flex; flex-wrap:wrap; gap:6px 14px; justify-content:center; padding:14px 20px 0; max-width:520px; border-top:1px solid var(--border); margin-top:14px; }
+.legend { display:flex; flex-wrap:wrap; gap:6px 16px; justify-content:center; padding:0 0 14px; }
 .leg { font-size:0.62rem; color:#4a7a38; display:flex; gap:4px; align-items:center; }
 
-.paytable-toggle { font-size:0.65rem; background:none; border:1px solid var(--border); color:var(--green-dim); padding:4px 12px; border-radius:2px; cursor:pointer; margin-top:10px; font-family:'Share Tech Mono',monospace; transition:all 0.15s; }
-.paytable-toggle:hover { border-color:var(--green-mid); color:var(--green-mid); }
-.paytable { display:none; max-width:520px; width:100%; background:var(--panel2); border:1px solid var(--border); border-radius:3px; padding:12px 16px; margin-top:8px; font-size:0.65rem; }
-.paytable.open { display:block; }
+.paytable { width:100%; background:var(--panel2); border:1px solid var(--border); border-radius:3px; padding:12px 16px; margin-top:4px; font-size:0.65rem; }
 .paytable table { width:100%; border-collapse:collapse; }
 .paytable th,.paytable td { padding:4px 8px; text-align:right; border-bottom:1px solid var(--border); }
 .paytable th  { color:var(--green-dim); letter-spacing:0.1em; text-align:center; }
 .paytable td:first-child { text-align:left; }
 .paytable tr:last-child td { border-bottom:none; }
+
+/* ── AUX BUTTONS (Info / Reset) ── */
+.aux-btn {
+  font-family:'Share Tech Mono',monospace; font-size:0.7rem;
+  letter-spacing:0.1em; text-transform:uppercase;
+  background:none; border:1px solid var(--border); color:var(--green-dim);
+  border-radius:3px; padding:10px 14px; cursor:pointer; transition:all 0.15s;
+}
+.aux-btn:hover { border-color:var(--green-mid); color:var(--green-mid); }
+.aux-btn.amber { color:var(--amber-dim); border-color:var(--amber-dim); }
+.aux-btn.amber:hover { border-color:var(--amber); color:var(--amber); }
+
+/* ── INFO MODAL ── */
+.modal-overlay {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.80);
+  z-index:100; align-items:center; justify-content:center; padding:16px;
+}
+.modal-overlay.open { display:flex; }
+.modal-box {
+  background:var(--panel); border:1px solid var(--border); border-radius:4px;
+  padding:18px 22px; max-width:520px; width:100%;
+  max-height:85vh; overflow-y:auto;
+  box-shadow:0 0 60px rgba(0,0,0,0.85);
+}
+.modal-hdr {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border);
+}
+.modal-title {
+  font-family:'Russo One',sans-serif; font-size:0.8rem;
+  color:var(--green); letter-spacing:0.2em; text-transform:uppercase;
+}
+.modal-close {
+  background:none; border:1px solid var(--border); color:var(--green-dim);
+  width:26px; height:26px; cursor:pointer; border-radius:2px;
+  font-size:0.8rem; line-height:1; padding:0; font-family:inherit;
+  transition:all 0.15s;
+}
+.modal-close:hover { border-color:var(--red); color:var(--red); }
+.modal-section-hdr {
+  font-size:0.6rem; color:var(--green-dim); letter-spacing:0.2em;
+  text-transform:uppercase; margin:14px 0 8px; border-bottom:1px solid var(--border);
+  padding-bottom:4px;
+}
 </style>
 </head>
 <body>
@@ -266,35 +307,55 @@ h1 {
     <button class="bet-btn" id="betUp">+</button>
   </div>
   <button class="spin-btn" id="spinBtn">▶ DEPLOY</button>
+  <button class="aux-btn" id="infoBtn">ℹ INFO</button>
+  <button class="aux-btn amber" id="resetBtn">↺ RESET</button>
 </div>
 
-<div class="legend">
-  <div class="leg">🪖 Helmet</div><div class="leg">🏅 Dog Tags</div>
-  <div class="leg">👟 Boots</div><div class="leg">🔫 Pistol</div>
-  <div class="leg">🎯 Rifle</div><div class="leg">🧨 Grenade</div>
-  <div class="leg">🚁 Helicopter</div><div class="leg">⚙️ Tank (rare)</div>
-  <div class="leg">⭐ Wild</div><div class="leg">🚩 Scatter (R2-5)</div>
-  <div class="leg">💣 Bomb (row+col)</div><div class="leg">☢️ Super Bomb</div>
-</div>
+<!-- ── INFO MODAL ── -->
+<div class="modal-overlay" id="infoModal">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span class="modal-title">⚔ Intel Briefing</span>
+      <button class="modal-close" id="infoClose">✕</button>
+    </div>
 
-<button class="paytable-toggle" id="ptToggle">▼ PAYTABLE</button>
-<div class="paytable" id="paytable">
-  <table>
-    <tr><th>Symbol</th><th>×5</th><th>×7</th><th>×9</th><th>×12</th><th>×15+</th></tr>
-    <tr><td>🪖 Helmet</td>    <td>0.2</td><td>0.4</td><td>0.8</td><td>1.5</td><td>3</td></tr>
-    <tr><td>🏅 Dog Tags</td>  <td>0.3</td><td>0.6</td><td>1.0</td><td>2.0</td><td>4</td></tr>
-    <tr><td>👟 Boots</td>     <td>0.4</td><td>0.8</td><td>1.5</td><td>3.0</td><td>6</td></tr>
-    <tr><td>🔫 Pistol</td>    <td>0.6</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8</td></tr>
-    <tr><td>🎯 Rifle</td>     <td>0.8</td><td>1.5</td><td>3.0</td><td>6.0</td><td>12</td></tr>
-    <tr><td>🧨 Grenade</td>   <td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>16</td></tr>
-    <tr><td>🚁 Helicopter</td><td>1.5</td><td>3.0</td><td>6.0</td><td>12</td><td>25</td></tr>
-    <tr><td>⚙️ Tank</td>      <td>2.0</td><td>5.0</td><td>10</td><td>20</td><td>50</td></tr>
-    <tr><td>⭐ Wild cluster</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>20</td></tr>
-  </table>
-  <div style="margin-top:8px;color:var(--green-dim);font-size:0.6rem;line-height:1.6;">
-    Win = Paytable × Bet × Σ(cell multipliers in cluster)<br>
-    Bomb: clears row + column · Super Bomb: clears entire grid<br>
-    Free Spins: Bombs→Super Bombs · Multipliers carry over &amp; accumulate
+    <div class="modal-section-hdr">Symbols</div>
+    <div class="legend">
+      <div class="leg">🪖 Helmet</div><div class="leg">🏅 Dog Tags</div>
+      <div class="leg">👟 Boots</div><div class="leg">🔫 Pistol</div>
+      <div class="leg">🎯 Rifle</div><div class="leg">🧨 Grenade</div>
+      <div class="leg">🚁 Helicopter</div><div class="leg">⚙️ Tank (rare)</div>
+      <div class="leg">⭐ Wild (substitutes + clusters)</div>
+      <div class="leg">🚩 Scatter — reels 2–5 only</div>
+      <div class="leg">💣 Bomb — clears full row + column</div>
+      <div class="leg">☢️ Super Bomb — clears entire grid</div>
+    </div>
+
+    <div class="modal-section-hdr">Paytable (× bet · interpolated between tiers)</div>
+    <div class="paytable">
+      <table>
+        <tr><th>Symbol</th><th>×5</th><th>×7</th><th>×9</th><th>×12</th><th>×15+</th></tr>
+        <tr><td>🪖 Helmet</td>     <td>0.2</td><td>0.4</td><td>0.8</td><td>1.5</td><td>3</td></tr>
+        <tr><td>🏅 Dog Tags</td>   <td>0.3</td><td>0.6</td><td>1.0</td><td>2.0</td><td>4</td></tr>
+        <tr><td>👟 Boots</td>      <td>0.4</td><td>0.8</td><td>1.5</td><td>3.0</td><td>6</td></tr>
+        <tr><td>🔫 Pistol</td>     <td>0.6</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8</td></tr>
+        <tr><td>🎯 Rifle</td>      <td>0.8</td><td>1.5</td><td>3.0</td><td>6.0</td><td>12</td></tr>
+        <tr><td>🧨 Grenade</td>    <td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>16</td></tr>
+        <tr><td>🚁 Helicopter</td> <td>1.5</td><td>3.0</td><td>6.0</td><td>12</td><td>25</td></tr>
+        <tr><td>⚙️ Tank</td>       <td>2.0</td><td>5.0</td><td>10</td><td>20</td><td>50</td></tr>
+        <tr><td>⭐ Wild cluster</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>20</td></tr>
+      </table>
+    </div>
+
+    <div class="modal-section-hdr">Rules</div>
+    <div style="font-size:0.62rem;color:var(--green-dim);line-height:1.8;">
+      <b style="color:var(--green-mid);">Win</b> = Paytable × Bet × Σ(cell multipliers in cluster)<br>
+      <b style="color:var(--green-mid);">Cluster</b> — 5+ connected matching symbols (H/V only). Wilds substitute for any regular symbol and also form their own pure-wild clusters.<br>
+      <b style="color:var(--green-mid);">Cascade</b> — cleared symbols fall away; new symbols drop from the top. Repeats until no bombs or clusters remain.<br>
+      <b style="color:var(--green-mid);">Multipliers</b> — each cleared cell gains +1×. Persist across cascades. Carry into and accumulate throughout Free Spins. Reset when Free Spins end.<br>
+      <b style="color:var(--green-mid);">Free Spins</b> — triggered by 3/4/5 🚩 on reels 2–5 (awards 8/12/20 spins). Retriggerable. Bombs replaced by Super Bombs.<br>
+      <b style="color:var(--green-mid);">Scatter</b> — only spawns on reels 2–5.
+    </div>
   </div>
 </div>
 
@@ -303,6 +364,7 @@ h1 {
 //  CONFIG
 // ═══════════════════════════════════════════
 const HEIGHTS     = [4,5,6,6,5,4];
+const MAX_H       = Math.max(...HEIGHTS); // 6 — tallest reel, used for visual-row math
 const REELS       = 6;
 const MIN_CLUSTER = 5;
 const STEP        = 70; // cell(68) + gap(2)
@@ -446,12 +508,14 @@ function bombCells(b) {
   if(b.type==='SUPER_BOMB'){
     for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) set.add(k(r,row));
   } else {
-    // Horizontal row: find cells at the same *visual* height across all reels.
-    // The grid is bottom-aligned, so visual-from-bottom = HEIGHTS[r]-1-row.
-    // For a bomb at [b.reel, b.row], target visual depth = HEIGHTS[b.reel]-1-b.row.
-    const visualFromBottom = HEIGHTS[b.reel] - 1 - b.row;
+    // Horizontal row: reels are center-aligned so reel r's top edge sits at
+    // (MAX_H - HEIGHTS[r]) / 2 rows down from the grid's visual top.
+    // visualY of [b.reel, b.row] = (MAX_H - HEIGHTS[b.reel]) / 2 + b.row
+    // Solve for row in reel r at the same visualY:
+    //   row = visualY - (MAX_H - HEIGHTS[r]) / 2
+    const visualY = (MAX_H - HEIGHTS[b.reel]) / 2 + b.row;
     for(let r=0;r<REELS;r++){
-      const row = HEIGHTS[r] - 1 - visualFromBottom;
+      const row = Math.round(visualY - (MAX_H - HEIGHTS[r]) / 2);
       if(row>=0 && row<HEIGHTS[r]) set.add(k(r,row));
     }
     // Vertical column: every cell in the bomb's reel
@@ -801,10 +865,18 @@ document.getElementById('betUp').addEventListener('click',()=>{
 document.getElementById('betDown').addEventListener('click',()=>{
   if(G.betIdx>0){G.betIdx--;G.bet=BET_STEPS[G.betIdx];document.getElementById('betVal').textContent=G.bet.toFixed(2);}
 });
-document.getElementById('ptToggle').addEventListener('click',()=>{
-  const pt=document.getElementById('paytable');
-  const open=pt.classList.toggle('open');
-  document.getElementById('ptToggle').textContent=(open?'▲':'▼')+' PAYTABLE';
+document.getElementById('infoBtn').addEventListener('click',()=>{
+  document.getElementById('infoModal').classList.add('open');
+});
+document.getElementById('infoClose').addEventListener('click',()=>{
+  document.getElementById('infoModal').classList.remove('open');
+});
+document.getElementById('infoModal').addEventListener('click',e=>{
+  if(e.target===e.currentTarget) e.currentTarget.classList.remove('open');
+});
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  G.balance=1000; G.sessionWin=0; updateHUD();
+  setLog('BALANCE RESET — READY FOR DEPLOYMENT');
 });
 
 // ═══════════════════════════════════════════
