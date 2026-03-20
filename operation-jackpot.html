@@ -250,6 +250,7 @@ h1 {
   50%     { text-shadow:0 0 14px rgba(255,120,60,0.9); }
 }
 .cell.is-scatter .sym { animation:scatter-pulse 1.4s ease-in-out infinite; }
+.cell.is-wild .sym    { font-family:'Russo One',sans-serif; font-size:2rem; color:#f0a500; text-shadow:0 0 8px #f0a50088; }
 
 /* ── HUD ── */
 .hud { display:flex; gap:10px; margin-top:10px; width:100%; max-width:520px; }
@@ -408,7 +409,7 @@ h1 {
       <div class="leg">👟 Boots</div><div class="leg">🔫 Pistol</div>
       <div class="leg">🎯 Rifle</div><div class="leg">🧨 Grenade</div>
       <div class="leg">🚁 Helicopter</div><div class="leg">⚙️ Tank (rare)</div>
-      <div class="leg">⭐ Wild (substitutes + clusters)</div>
+      <div class="leg">W Wild (substitutes + clusters)</div>
       <div class="leg">🚩 Scatter — reels 2–5 only</div>
       <div class="leg">💣 Bomb — clears full row + column</div>
       <div class="leg">☢️ Super Bomb — clears entire grid</div>
@@ -425,7 +426,7 @@ h1 {
         <tr><td>🧨 Grenade</td>    <td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>16</td></tr>
         <tr><td>🚁 Helicopter</td> <td>1.5</td><td>3.0</td><td>6.0</td><td>12</td><td>25</td></tr>
         <tr><td>⚙️ Tank</td>       <td>2.0</td><td>5.0</td><td>10</td><td>20</td><td>50</td></tr>
-        <tr><td>⭐ Wild cluster</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>20</td></tr>
+        <tr><td>W Wild cluster</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>20</td></tr>
       </table>
     </div>
 
@@ -459,7 +460,7 @@ const SYM = {
   GRENADE:    {e:'🧨', w:10},
   HELICOPTER: {e:'🚁', w:7},
   TANK:       {e:'⚙️', w:5},
-  WILD:       {e:'⭐', w:3,  special:'wild'},
+  WILD:       {e:'W', w:3,  special:'wild'},
   SCATTER:    {e:'🚩', w:2,  special:'scatter'},
   BOMB:       {e:'💣', w:1,  special:'bomb'},
   SUPER_BOMB: {e:'☢️', w:0.5,special:'superbomb'},
@@ -682,6 +683,7 @@ function refreshCell(el,r,row) {
   el.innerHTML=`<span class="sym">${sym?SYM[sym].e:''}</span><span class="mult">${m}×</span>`;
   el.dataset.m=m>=10?'hi':m>=4?'4':m>=3?'3':m>=2?'2':'1';
   el.classList.toggle('is-scatter',sym==='SCATTER');
+  el.classList.toggle('is-wild',   sym==='WILD');
 }
 
 function updateCell(r,row){ const el=getCellEl(r,row); if(el) refreshCell(el,r,row); }
