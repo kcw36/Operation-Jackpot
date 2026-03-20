@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operation Jackpot</title>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:          #080c06;
+  --panel:       #0e1a0a;
+  --panel2:      #121f0e;
+  --border:      #1e3a12;
+  --green:       #4dff6e;
+  --green-dim:   #1e5a28;
+  --green-mid:   #2a8a3a;
+  --amber:       #ffb800;
+  --amber-dim:   #7a5800;
+  --red:         #ff3e2a;
+  --white:       #d8edd0;
+  --cell:        68px;
+  --gap:         2px;
+  --step:        70px;
+}
+
+* { box-sizing:border-box; margin:0; padding:0; }
+
+body {
+  background:var(--bg); color:var(--white);
+  font-family:'Share Tech Mono',monospace;
+  min-height:100vh; display:flex; flex-direction:column; align-items:center;
+  padding-bottom:32px;
+  background-image:
+    radial-gradient(ellipse at 20% 50%,rgba(20,60,10,0.3) 0%,transparent 60%),
+    radial-gradient(ellipse at 80% 20%,rgba(10,40,8,0.2) 0%,transparent 50%);
+}
+body::after {
+  content:''; position:fixed; inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.08) 3px,rgba(0,0,0,0.08) 4px);
+  pointer-events:none; z-index:999;
+}
+
+header { text-align:center; padding:18px 20px 12px; }
+h1 {
+  font-family:'Russo One',sans-serif; font-size:2.2rem; color:var(--green);
+  letter-spacing:0.18em; text-transform:uppercase;
+  text-shadow:0 0 24px rgba(77,255,110,0.45),0 0 60px rgba(77,255,110,0.15);
+}
+.tagline { font-size:0.65rem; color:var(--green-dim); letter-spacing:0.35em; text-transform:uppercase; margin-top:3px; }
+
+.fs-banner {
+  display:none; font-family:'Russo One',sans-serif; font-size:0.8rem;
+  letter-spacing:0.2em; text-transform:uppercase; color:var(--amber);
+  border:1px solid var(--amber-dim);
+  background:linear-gradient(90deg,transparent,rgba(255,184,0,0.08),transparent);
+  padding:6px 28px; border-radius:2px; margin-bottom:8px;
+  animation:pulseBanner 1.8s ease-in-out infinite;
+}
+.fs-banner.on { display:block; }
+@keyframes pulseBanner { 0%,100%{opacity:1} 50%{opacity:0.55} }
+
+.win-flash {
+  height:38px; display:flex; align-items:center; justify-content:center;
+  font-family:'Russo One',sans-serif; font-size:1.35rem; color:var(--amber);
+  text-shadow:0 0 16px rgba(255,184,0,0.6); letter-spacing:0.1em; margin-bottom:4px;
+}
+@keyframes winAppear { 0%{transform:scale(0.4);opacity:0} 65%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
+.win-flash.show { animation:winAppear 0.35s ease-out; }
+
+/* ── GRID WRAP ── */
+.grid-wrap {
+  position:relative; background:var(--panel); border:1px solid var(--border);
+  border-radius:4px; padding:14px;
+  box-shadow:0 0 40px rgba(77,255,110,0.07),inset 0 0 60px rgba(0,0,0,0.4);
+}
+.grid { display:flex; align-items:flex-end; gap:4px; }
+
+/* ── REEL — the viewport window, clips the drum ── */
+.reel {
+  position:relative; overflow:hidden;
+  /* edge-fade: simulates the drum curving away top and bottom */
+  -webkit-mask-image:linear-gradient(to bottom,
+    transparent 0%,rgba(0,0,0,0.4) 6%,black 14%,black 86%,rgba(0,0,0,0.4) 94%,transparent 100%);
+  mask-image:linear-gradient(to bottom,
+    transparent 0%,rgba(0,0,0,0.4) 6%,black 14%,black 86%,rgba(0,0,0,0.4) 94%,transparent 100%);
+}
+
+/* ── REEL STRIP — the scrolling band inside the drum ── */
+.reel-strip {
+  display:flex; flex-direction:column; gap:var(--gap);
+  will-change:transform,filter;
+}
+
+/* ════════════════════════════════════
+   DRUM SPIN ANIMATION
+   The whole strip scrolls upward (drum
+   rotating forward), blurs at peak,
+   then decelerates and locks with a
+   tiny mechanical overshoot.
+   Stagger controlled via CSS vars.
+   ════════════════════════════════════ */
+@keyframes drumSpin {
+  0%   { transform:translateY(0px);    filter:blur(0px);   }
+  14%  { transform:translateY(-28px);  filter:blur(3px);   }
+  38%  { transform:translateY(-91px);  filter:blur(9px);   }
+  62%  { transform:translateY(-154px); filter:blur(14px);  }
+  79%  { transform:translateY(-112px); filter:blur(8px);   }
+  91%  { transform:translateY(-21px);  filter:blur(2.5px); }
+  96%  { transform:translateY(5px);    filter:blur(0.4px); }
+  100% { transform:translateY(0px);    filter:blur(0px);   }
+}
+
+.reel.spinning .reel-strip {
+  animation:drumSpin var(--spin-dur,750ms) var(--spin-delay,0ms)
+            cubic-bezier(0.22,0.8,0.48,1) both;
+}
+
+/* ── CELL ── */
+.cell {
+  width:var(--cell); height:var(--cell); background:#0b170a;
+  border:1px solid var(--border); border-radius:2px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  position:relative; overflow:hidden;
+  transition:border-color 0.2s,background 0.3s;
+  user-select:none; flex-shrink:0;
+}
+.cell .sym  { font-size:1.75rem; line-height:1; position:relative; z-index:1; }
+.cell .mult {
+  position:absolute; bottom:2px; right:4px; font-size:0.55rem; color:var(--amber);
+  font-family:'Share Tech Mono',monospace; z-index:2; line-height:1;
+}
+.cell .mult:empty { display:none; }
+.cell[data-m="2"]  { border-color:#2a5a18; }
+.cell[data-m="3"]  { border-color:#3a7a22; background:#0d1e0b; }
+.cell[data-m="4"]  { border-color:#4aaa2a; background:#0f2410; }
+.cell[data-m="hi"] { border-color:var(--amber); background:#181400; box-shadow:inset 0 0 12px rgba(255,184,0,0.18); }
+
+/* ════════════════════════════════════
+   ROLL OUT — symbol cleared
+   Squishes upward as the tape advances,
+   like it's being pulled into the drum
+   ════════════════════════════════════ */
+@keyframes rollOut {
+  0%   { transform:translateY(0px)   scaleY(1);    filter:blur(0px);  opacity:1; }
+  22%  { transform:translateY(-10px) scaleY(0.82); filter:blur(2px);  opacity:0.9; }
+  58%  { transform:translateY(-32px) scaleY(0.38); filter:blur(6px);  opacity:0.55; }
+  100% { transform:translateY(-58px) scaleY(0.04); filter:blur(10px); opacity:0; }
+}
+.cell.roll-out {
+  animation:rollOut 0.36s cubic-bezier(0.42,0,0.78,0.52) forwards;
+  pointer-events:none;
+}
+
+/* ════════════════════════════════════
+   ROLL IN — new symbol dropping in
+   Slides down from above as the drum
+   advances, bounces gently into place
+   ════════════════════════════════════ */
+@keyframes rollIn {
+  0%   { transform:translateY(-72px) scaleY(0.12); filter:blur(10px); opacity:0.2; }
+  42%  { transform:translateY(6px)   scaleY(1.07); filter:blur(1px);  opacity:1; }
+  65%  { transform:translateY(-3px)  scaleY(0.97); filter:blur(0px);  opacity:1; }
+  82%  { transform:translateY(1px)   scaleY(1.01); }
+  100% { transform:translateY(0px)   scaleY(1);    filter:blur(0px);  opacity:1; }
+}
+.cell.roll-in {
+  animation:rollIn var(--roll-dur,420ms) var(--roll-delay,0ms)
+            cubic-bezier(0.34,1.18,0.64,1) both;
+}
+
+/* ════════════════════════════════════
+   WIN / BOMB flashes
+   ════════════════════════════════════ */
+@keyframes cellWin {
+  0%   { transform:scale(1);    box-shadow:none; }
+  30%  { transform:scale(1.1);  box-shadow:inset 0 0 18px rgba(77,255,110,0.55); border-color:var(--green) !important; }
+  100% { transform:scale(1);    box-shadow:none; }
+}
+.cell.anim-win  { animation:cellWin 0.5s ease-out; border-color:var(--green) !important; }
+
+@keyframes cellBomb {
+  0%   { transform:scale(1);    background:#0b170a; }
+  18%  { transform:scale(1.22); background:#ff4400; border-color:#ff9900 !important; }
+  55%  { transform:scale(0.88); background:#ffbb00; opacity:0.65; }
+  100% { transform:scale(1);    background:#0b170a; opacity:1; }
+}
+.cell.anim-bomb { animation:cellBomb 0.52s ease-out; }
+
+@keyframes scatter-glow {
+  0%,100% { box-shadow:inset 0 0 10px rgba(255,50,50,0.3);  border-color:#aa2222; }
+  50%     { box-shadow:inset 0 0 22px rgba(255,100,50,0.65); border-color:#ff5533; }
+}
+.cell.is-scatter { animation:scatter-glow 1.2s ease-in-out infinite; }
+
+/* ── HUD ── */
+.hud { display:flex; gap:10px; margin-top:10px; width:100%; max-width:520px; }
+.hud-box { flex:1; background:var(--panel2); border:1px solid var(--border); border-radius:3px; padding:7px 10px; text-align:center; }
+.hud-label { font-size:0.58rem; color:var(--green-dim); letter-spacing:0.2em; text-transform:uppercase; display:block; }
+.hud-val   { font-family:'Russo One',sans-serif; font-size:1.15rem; color:var(--green); display:block; }
+.hud-val.amber { color:var(--amber); }
+
+/* ── CONTROLS ── */
+.controls { display:flex; align-items:center; gap:12px; margin:12px 0 6px; }
+.bet-box { display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--border); border-radius:3px; padding:7px 12px; }
+.bet-label { font-size:0.6rem; color:var(--green-dim); letter-spacing:0.2em; }
+.bet-val   { font-family:'Russo One',sans-serif; color:var(--amber); font-size:1rem; min-width:52px; text-align:center; }
+.bet-btn {
+  background:none; border:1px solid var(--border); color:var(--green);
+  width:22px; height:22px; border-radius:2px; cursor:pointer;
+  font-size:1.1rem; line-height:1; display:flex; align-items:center; justify-content:center;
+  padding:0; transition:border-color 0.15s;
+}
+.bet-btn:hover { border-color:var(--green); }
+.spin-btn {
+  font-family:'Russo One',sans-serif; font-size:1rem; letter-spacing:0.12em; text-transform:uppercase;
+  background:var(--green); color:#060a04; border:none; border-radius:3px; padding:12px 44px; cursor:pointer;
+  box-shadow:0 0 20px rgba(77,255,110,0.28); transition:all 0.15s;
+}
+.spin-btn:hover:not(:disabled) { background:#6dff88; box-shadow:0 0 32px rgba(77,255,110,0.5); }
+.spin-btn:disabled { opacity:0.35; cursor:not-allowed; }
+
+.log { font-size:0.72rem; color:var(--green-mid); letter-spacing:0.1em; text-align:center; min-height:18px; margin-top:4px; transition:color 0.3s; }
+.log.important { color:var(--amber); }
+
+.legend { display:flex; flex-wrap:wrap; gap:6px 14px; justify-content:center; padding:14px 20px 0; max-width:520px; border-top:1px solid var(--border); margin-top:14px; }
+.leg { font-size:0.62rem; color:#4a7a38; display:flex; gap:4px; align-items:center; }
+
+.paytable-toggle { font-size:0.65rem; background:none; border:1px solid var(--border); color:var(--green-dim); padding:4px 12px; border-radius:2px; cursor:pointer; margin-top:10px; font-family:'Share Tech Mono',monospace; transition:all 0.15s; }
+.paytable-toggle:hover { border-color:var(--green-mid); color:var(--green-mid); }
+.paytable { display:none; max-width:520px; width:100%; background:var(--panel2); border:1px solid var(--border); border-radius:3px; padding:12px 16px; margin-top:8px; font-size:0.65rem; }
+.paytable.open { display:block; }
+.paytable table { width:100%; border-collapse:collapse; }
+.paytable th,.paytable td { padding:4px 8px; text-align:right; border-bottom:1px solid var(--border); }
+.paytable th  { color:var(--green-dim); letter-spacing:0.1em; text-align:center; }
+.paytable td:first-child { text-align:left; }
+.paytable tr:last-child td { border-bottom:none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚔️ Operation Jackpot</h1>
+  <div class="tagline">6 Reels · Cluster Pays · Cascade · Multiplier Grid</div>
+</header>
+
+<div class="fs-banner" id="fsBanner">🎖️ FREE SPINS — <span id="fsNum">0</span> REMAINING</div>
+<div class="win-flash" id="winFlash"></div>
+
+<div class="grid-wrap">
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="log" id="log">READY FOR DEPLOYMENT</div>
+
+<div class="hud">
+  <div class="hud-box"><span class="hud-label">Balance</span><span class="hud-val" id="hBalance">1000.00</span></div>
+  <div class="hud-box"><span class="hud-label">Spin Win</span><span class="hud-val amber" id="hSpinWin">0.00</span></div>
+  <div class="hud-box"><span class="hud-label">Session Win</span><span class="hud-val amber" id="hTotalWin">0.00</span></div>
+</div>
+
+<div class="controls">
+  <div class="bet-box">
+    <span class="bet-label">BET</span>
+    <button class="bet-btn" id="betDown">−</button>
+    <span class="bet-val" id="betVal">1.00</span>
+    <button class="bet-btn" id="betUp">+</button>
+  </div>
+  <button class="spin-btn" id="spinBtn">▶ DEPLOY</button>
+</div>
+
+<div class="legend">
+  <div class="leg">🪖 Helmet</div><div class="leg">🏅 Dog Tags</div>
+  <div class="leg">👟 Boots</div><div class="leg">🔫 Pistol</div>
+  <div class="leg">🎯 Rifle</div><div class="leg">🧨 Grenade</div>
+  <div class="leg">🚁 Helicopter</div><div class="leg">⚙️ Tank (rare)</div>
+  <div class="leg">⭐ Wild</div><div class="leg">🚩 Scatter (R2-5)</div>
+  <div class="leg">💣 Bomb (row+col)</div><div class="leg">☢️ Super Bomb</div>
+</div>
+
+<button class="paytable-toggle" id="ptToggle">▼ PAYTABLE</button>
+<div class="paytable" id="paytable">
+  <table>
+    <tr><th>Symbol</th><th>×5</th><th>×7</th><th>×9</th><th>×12</th><th>×15+</th></tr>
+    <tr><td>🪖 Helmet</td>    <td>0.2</td><td>0.4</td><td>0.8</td><td>1.5</td><td>3</td></tr>
+    <tr><td>🏅 Dog Tags</td>  <td>0.3</td><td>0.6</td><td>1.0</td><td>2.0</td><td>4</td></tr>
+    <tr><td>👟 Boots</td>     <td>0.4</td><td>0.8</td><td>1.5</td><td>3.0</td><td>6</td></tr>
+    <tr><td>🔫 Pistol</td>    <td>0.6</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8</td></tr>
+    <tr><td>🎯 Rifle</td>     <td>0.8</td><td>1.5</td><td>3.0</td><td>6.0</td><td>12</td></tr>
+    <tr><td>🧨 Grenade</td>   <td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>16</td></tr>
+    <tr><td>🚁 Helicopter</td><td>1.5</td><td>3.0</td><td>6.0</td><td>12</td><td>25</td></tr>
+    <tr><td>⚙️ Tank</td>      <td>2.0</td><td>5.0</td><td>10</td><td>20</td><td>50</td></tr>
+    <tr><td>⭐ Wild cluster</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>20</td></tr>
+  </table>
+  <div style="margin-top:8px;color:var(--green-dim);font-size:0.6rem;line-height:1.6;">
+    Win = Paytable × Bet × Σ(cell multipliers in cluster)<br>
+    Bomb: clears row + column · Super Bomb: clears entire grid<br>
+    Free Spins: Bombs→Super Bombs · Multipliers carry over &amp; accumulate
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════
+const HEIGHTS     = [4,5,6,6,5,4];
+const REELS       = 6;
+const MIN_CLUSTER = 5;
+const STEP        = 70; // cell(68) + gap(2)
+
+const SYM = {
+  HELMET:     {e:'🪖', w:20},
+  DOG_TAGS:   {e:'🏅', w:18},
+  BOOTS:      {e:'👟', w:16},
+  PISTOL:     {e:'🔫', w:14},
+  RIFLE:      {e:'🎯', w:12},
+  GRENADE:    {e:'🧨', w:10},
+  HELICOPTER: {e:'🚁', w:7},
+  TANK:       {e:'⚙️', w:5},
+  WILD:       {e:'⭐', w:3,  special:'wild'},
+  SCATTER:    {e:'🚩', w:2,  special:'scatter'},
+  BOMB:       {e:'💣', w:2,  special:'bomb'},
+  SUPER_BOMB: {e:'☢️', w:1,  special:'superbomb'},
+};
+
+const PAY = {
+  HELMET:     {5:0.2,7:0.4,  9:0.8,  12:1.5,  15:3  },
+  DOG_TAGS:   {5:0.3,7:0.6,  9:1.0,  12:2.0,  15:4  },
+  BOOTS:      {5:0.4,7:0.8,  9:1.5,  12:3.0,  15:6  },
+  PISTOL:     {5:0.6,7:1.0,  9:2.0,  12:4.0,  15:8  },
+  RIFLE:      {5:0.8,7:1.5,  9:3.0,  12:6.0,  15:12 },
+  GRENADE:    {5:1.0,7:2.0,  9:4.0,  12:8.0,  15:16 },
+  HELICOPTER: {5:1.5,7:3.0,  9:6.0,  12:12,   15:25 },
+  TANK:       {5:2.0,7:5.0,  9:10,   12:20,   15:50 },
+  WILD:       {5:1.0,7:2.0,  9:4.0,  12:8.0,  15:20 },
+};
+
+const FS_TABLE  = {3:8,4:12,5:20};
+const BET_STEPS = [0.20,0.50,1.00,2.00,5.00,10.00,20.00,50.00];
+
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+let G = {
+  balance:1000, bet:1.00, betIdx:2,
+  grid:[], mults:[],
+  freeSpins:0, inFS:false,
+  spinWin:0, sessionWin:0, busy:false,
+};
+
+// ═══════════════════════════════════════════
+//  RNG
+// ═══════════════════════════════════════════
+function weightedDraw(pool) {
+  let total=pool.reduce((s,[,w])=>s+w,0), r=Math.random()*total;
+  for(const [k,w] of pool){ r-=w; if(r<=0) return k; }
+  return pool.at(-1)[0];
+}
+function drawSym(reel,isFS) {
+  const pool=[];
+  for(const [key,s] of Object.entries(SYM)){
+    if(key==='SCATTER'&&(reel<1||reel>4)) continue;
+    if(key==='BOMB'&&isFS) continue;
+    let w=s.w;
+    if(isFS&&key==='SUPER_BOMB') w=3;
+    pool.push([key,w]);
+  }
+  return weightedDraw(pool);
+}
+
+// ═══════════════════════════════════════════
+//  PAYTABLE INTERPOLATION
+// ═══════════════════════════════════════════
+function getPay(sym,size) {
+  const t=PAY[sym]; if(!t||size<5) return 0;
+  const tiers=[[5,t[5]],[7,t[7]],[9,t[9]],[12,t[12]],[15,t[15]]];
+  if(size>=15) return t[15];
+  for(let i=0;i<tiers.length-1;i++){
+    const [s0,p0]=tiers[i],[s1,p1]=tiers[i+1];
+    if(size>=s0&&size<=s1){const f=(size-s0)/(s1-s0);return p0+f*(p1-p0);}
+  }
+  return 0;
+}
+
+// ═══════════════════════════════════════════
+//  GRID LOGIC
+// ═══════════════════════════════════════════
+function neighbors(reel,row) {
+  const nb=[];
+  if(row>0)                              nb.push([reel,row-1]);
+  if(row<HEIGHTS[reel]-1)               nb.push([reel,row+1]);
+  if(reel>0      &&row<HEIGHTS[reel-1]) nb.push([reel-1,row]);
+  if(reel<REELS-1&&row<HEIGHTS[reel+1]) nb.push([reel+1,row]);
+  return nb;
+}
+
+function findClusters() {
+  const visited=HEIGHTS.map(h=>Array(h).fill(false));
+  const clusters=[];
+  for(let r=0;r<REELS;r++){
+    for(let row=0;row<HEIGHTS[r];row++){
+      if(visited[r][row]) continue;
+      const sym=G.grid[r][row];
+      if(!sym||sym==='WILD'||SYM[sym]?.special) continue;
+      const queue=[[r,row]],cells=[];
+      visited[r][row]=true;
+      while(queue.length){
+        const [cr,cro]=queue.shift(); cells.push([cr,cro]);
+        for(const [nr,nro] of neighbors(cr,cro)){
+          if(visited[nr][nro]) continue;
+          const ns=G.grid[nr][nro];
+          if(ns===sym||ns==='WILD'){visited[nr][nro]=true;queue.push([nr,nro]);}
+        }
+      }
+      if(cells.length>=MIN_CLUSTER) clusters.push({sym,cells});
+    }
+  }
+  // Pure wild clusters
+  for(let r=0;r<REELS;r++){
+    for(let row=0;row<HEIGHTS[r];row++){
+      if(visited[r][row]||G.grid[r][row]!=='WILD') continue;
+      const queue=[[r,row]],cells=[];
+      visited[r][row]=true;
+      while(queue.length){
+        const [cr,cro]=queue.shift(); cells.push([cr,cro]);
+        for(const [nr,nro] of neighbors(cr,cro)){
+          if(!visited[nr][nro]&&G.grid[nr][nro]==='WILD'){visited[nr][nro]=true;queue.push([nr,nro]);}
+        }
+      }
+      if(cells.length>=MIN_CLUSTER) clusters.push({sym:'WILD',cells});
+    }
+  }
+  return clusters;
+}
+
+function findBombs() {
+  const bombs=[];
+  for(let r=0;r<REELS;r++)
+    for(let row=0;row<HEIGHTS[r];row++)
+      if(G.grid[r][row]==='BOMB'||G.grid[r][row]==='SUPER_BOMB')
+        bombs.push({type:G.grid[r][row],reel:r,row});
+  return bombs;
+}
+
+function bombCells(b) {
+  const set=new Set(),k=(r,ro)=>`${r},${ro}`;
+  if(b.type==='SUPER_BOMB'){
+    for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) set.add(k(r,row));
+  } else {
+    for(let r=0;r<REELS;r++)          if(b.row<HEIGHTS[r])     set.add(k(r,b.row));
+    for(let row=0;row<HEIGHTS[b.reel];row++) set.add(k(b.reel,row));
+  }
+  return [...set].map(s=>s.split(',').map(Number));
+}
+
+function countScatters() {
+  let n=0;
+  for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) if(G.grid[r][row]==='SCATTER') n++;
+  return n;
+}
+
+// ═══════════════════════════════════════════
+//  DOM  —  .reel > .reel-strip > .cell × N
+// ═══════════════════════════════════════════
+const getReelEl  = r      => document.getElementById(`reel-${r}`);
+const getStripEl = r      => document.getElementById(`strip-${r}`);
+const getCellEl  = (r,row)=> document.getElementById(`c-${r}-${row}`);
+
+function renderGrid() {
+  const container=document.getElementById('grid');
+  container.innerHTML='';
+  for(let r=0;r<REELS;r++){
+    const reelEl=document.createElement('div');
+    reelEl.className='reel'; reelEl.id=`reel-${r}`;
+    reelEl.style.height=`${HEIGHTS[r]*STEP-2}px`;
+
+    const strip=document.createElement('div');
+    strip.className='reel-strip'; strip.id=`strip-${r}`;
+    for(let row=0;row<HEIGHTS[r];row++) strip.appendChild(buildCell(r,row));
+    reelEl.appendChild(strip);
+    container.appendChild(reelEl);
+  }
+}
+
+function buildCell(r,row) {
+  const el=document.createElement('div');
+  el.className='cell'; el.id=`c-${r}-${row}`;
+  refreshCell(el,r,row);
+  return el;
+}
+
+function refreshCell(el,r,row) {
+  const sym=G.grid[r][row], m=G.mults[r][row];
+  el.innerHTML=`<span class="sym">${sym?SYM[sym].e:''}</span><span class="mult">${m>1?m+'×':''}</span>`;
+  el.dataset.m=m>=10?'hi':m>=4?'4':m>=3?'3':m>=2?'2':'1';
+  el.classList.toggle('is-scatter',sym==='SCATTER');
+}
+
+function updateCell(r,row){ const el=getCellEl(r,row); if(el) refreshCell(el,r,row); }
+
+function updateHUD(){
+  document.getElementById('hBalance').textContent =G.balance.toFixed(2);
+  document.getElementById('hSpinWin').textContent =G.spinWin.toFixed(2);
+  document.getElementById('hTotalWin').textContent=G.sessionWin.toFixed(2);
+  document.getElementById('fsNum').textContent    =G.freeSpins;
+  document.getElementById('fsBanner').classList.toggle('on',G.inFS);
+}
+
+function setLog(msg,important=false){
+  const el=document.getElementById('log');
+  el.textContent=msg; el.classList.toggle('important',important);
+}
+
+function flashWin(amount){
+  const el=document.getElementById('winFlash');
+  if(amount>0){
+    el.textContent=`+ ${amount.toFixed(2)} CREDITS`;
+    el.className='win-flash show';
+    setTimeout(()=>el.className='win-flash',2200);
+  } else el.textContent='';
+}
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ═══════════════════════════════════════════
+//  ANIMATION LAYER
+// ═══════════════════════════════════════════
+
+/**
+ * Drum spin on all 6 reels, staggered left→right.
+ * Grid data must already be set before calling.
+ * At ~62% of each reel's animation (peak blur) the cell
+ * content is swapped invisibly, so the deceleration
+ * phase reveals the new symbols settling in.
+ */
+function doSpinAnimation() {
+  const BASE_DUR   = 640;  // reel 0 duration (ms)
+  const STAGGER    = 95;   // each reel starts this many ms later
+  const EXTRA_DUR  = 75;   // each subsequent reel also runs a bit longer
+  const UPDATE_PCT = 0.62; // swap content at peak blur
+
+  return new Promise(resolve=>{
+    let lastFinish=0;
+
+    for(let r=0;r<REELS;r++){
+      const delay  = r*STAGGER;
+      const dur    = BASE_DUR + r*EXTRA_DUR;
+      const reelEl = getReelEl(r);
+      const finishAt = delay+dur;
+      if(finishAt>lastFinish) lastFinish=finishAt;
+
+      // Schedule the invisible content swap at peak blur
+      setTimeout(()=>{
+        for(let row=0;row<HEIGHTS[r];row++) refreshCell(getCellEl(r,row),r,row);
+      }, delay + dur*UPDATE_PCT);
+
+      reelEl.style.setProperty('--spin-delay',`${delay}ms`);
+      reelEl.style.setProperty('--spin-dur',  `${dur}ms`);
+    }
+
+    // Force reflow then kick off all animations
+    // (delay handled in CSS so they all "start" together but fire at offsets)
+    for(let r=0;r<REELS;r++){
+      const reelEl=getReelEl(r);
+      reelEl.classList.remove('spinning');
+      void reelEl.offsetWidth;
+      reelEl.classList.add('spinning');
+    }
+
+    setTimeout(()=>{
+      for(let r=0;r<REELS;r++) getReelEl(r).classList.remove('spinning');
+      resolve();
+    }, lastFinish+50);
+  });
+}
+
+/**
+ * Roll out a set of cells (they're being cleared).
+ * Returns promise resolving when animation done.
+ */
+function rollOutCells(cells,dur=360) {
+  return new Promise(resolve=>{
+    for(const [r,row] of cells){
+      const el=getCellEl(r,row); if(!el) continue;
+      el.classList.remove('roll-in','anim-win','anim-bomb');
+      void el.offsetWidth;
+      el.classList.add('roll-out');
+      setTimeout(()=>el.classList.remove('roll-out'),dur+30);
+    }
+    setTimeout(resolve,dur);
+  });
+}
+
+/**
+ * Roll in newly arrived cells from the top.
+ * Cells in the same reel stagger top→bottom so they arrive
+ * sequentially like the tape advancing.
+ */
+function rollInCells(newCells) {
+  return new Promise(resolve=>{
+    const byReel={};
+    for(const [r,row] of newCells){
+      if(!byReel[r]) byReel[r]=[];
+      byReel[r].push(row);
+    }
+
+    let maxFinish=0;
+    const BASE_DUR=420;
+    const CELL_STAGGER=40; // ms between each symbol in a reel
+
+    for(const [rStr,rows] of Object.entries(byReel)){
+      rows.sort((a,b)=>a-b); // top row first
+      rows.forEach((row,i)=>{
+        const el=getCellEl(parseInt(rStr),row); if(!el) return;
+        const delay=i*CELL_STAGGER;
+        el.style.setProperty('--roll-delay',`${delay}ms`);
+        el.style.setProperty('--roll-dur',  `${BASE_DUR}ms`);
+        el.classList.remove('roll-out','anim-win','anim-bomb');
+        void el.offsetWidth;
+        el.classList.add('roll-in');
+        const finish=delay+BASE_DUR;
+        if(finish>maxFinish) maxFinish=finish;
+        setTimeout(()=>el.classList.remove('roll-in'),finish+30);
+      });
+    }
+
+    setTimeout(resolve, maxFinish+20);
+  });
+}
+
+/** Simple one-shot class anim on a set of cells */
+function animCells(cells,cls,dur=550){
+  for(const [r,row] of cells){
+    const el=getCellEl(r,row); if(!el) continue;
+    el.classList.add(cls);
+    setTimeout(()=>el.classList.remove(cls),dur);
+  }
+}
+
+// ═══════════════════════════════════════════
+//  CASCADE
+// ═══════════════════════════════════════════
+async function cascadeDown(clearedCells){
+  // 1. Animate cleared cells rolling out
+  await rollOutCells(clearedCells,350);
+
+  // 2. Compact non-null symbols to bottom, draw new ones for top
+  const newCells=[];
+  for(let r=0;r<REELS;r++){
+    const kept   =G.grid[r].map((s,i)=>[s,G.mults[r][i]]).filter(([s])=>s!==null);
+    const dropped=HEIGHTS[r]-kept.length;
+    if(dropped<=0) continue;
+    const fresh=Array.from({length:dropped},()=>drawSym(r,G.inFS));
+    G.grid[r] =[...fresh,...kept.map(([s])=>s)];
+    G.mults[r]=[...Array(dropped).fill(1),...kept.map(([,m])=>m)];
+    for(let i=0;i<dropped;i++) newCells.push([r,i]);
+  }
+
+  // 3. Refresh all cells in state (existing ones just update in-place)
+  for(let r=0;r<REELS;r++)
+    for(let row=0;row<HEIGHTS[r];row++) updateCell(r,row);
+
+  // 4. Roll in new symbols
+  if(newCells.length>0) await rollInCells(newCells);
+  else await sleep(50);
+}
+
+// ═══════════════════════════════════════════
+//  MAIN SPIN
+// ═══════════════════════════════════════════
+async function spin(){
+  if(G.busy) return;
+  if(!G.inFS&&G.balance<G.bet){setLog('INSUFFICIENT FUNDS — ADD CREDITS',true);return;}
+  G.busy=true;
+  document.getElementById('spinBtn').disabled=true;
+  document.getElementById('winFlash').textContent='';
+  G.spinWin=0;
+
+  if(!G.inFS){
+    G.balance-=G.bet;
+    G.mults=HEIGHTS.map(h=>Array(h).fill(1));
+  }
+
+  // Pre-roll all new symbols into state
+  for(let r=0;r<REELS;r++)
+    for(let row=0;row<HEIGHTS[r];row++)
+      G.grid[r][row]=drawSym(r,G.inFS);
+
+  setLog('DEPLOYING...');
+
+  // ── Drum spin — all 6 reels as one mechanical unit ──
+  await doSpinAnimation();
+
+  // Final refresh after animation clears
+  for(let r=0;r<REELS;r++)
+    for(let row=0;row<HEIGHTS[r];row++) updateCell(r,row);
+
+  await sleep(80);
+
+  // ── Scatter check ──
+  const sc=countScatters();
+  if(sc>=3){
+    const award=FS_TABLE[Math.min(sc,5)];
+    if(!G.inFS){ G.freeSpins+=award; G.inFS=true; setLog(`🚩 COMMAND POST — ${award} FREE SPINS!`,true); }
+    else        { G.freeSpins+=award;              setLog(`🚩 RETRIGGER — +${award} SPINS!`,true); }
+    updateHUD();
+    await sleep(1400);
+  }
+
+  // ── Cascade loop ──
+  let round=0, anyAction=true;
+  while(anyAction){
+    anyAction=false;
+    round++;
+
+    // 1. Bombs
+    const bombs=findBombs();
+    if(bombs.length>0){
+      anyAction=true;
+      for(const b of bombs){
+        const cells=bombCells(b);
+        setLog(`${b.type==='SUPER_BOMB'?'☢️ SUPER BOMB':'💣 BOMB'} DETONATED!`,true);
+        animCells([[b.reel,b.row]],'anim-bomb',520);
+        await sleep(180);
+        animCells(cells,'anim-bomb',460);
+        await sleep(250);
+        for(const [r,row] of cells){
+          if(G.grid[r][row]!==null){ G.mults[r][row]++; G.grid[r][row]=null; }
+        }
+        await cascadeDown(cells);
+      }
+    }
+
+    // 2. Clusters
+    const clusters=findClusters();
+    if(clusters.length>0){
+      anyAction=true;
+      const allCells=clusters.flatMap(c=>c.cells);
+
+      animCells(allCells,'anim-win',460);
+      await sleep(320);
+
+      let roundWin=0;
+      for(const c of clusters){
+        const sz=c.cells.length;
+        const basePay=getPay(c.sym,sz);
+        const multSum=c.cells.reduce((s,[r,row])=>s+G.mults[r][row],0);
+        roundWin+=basePay*G.bet*multSum;
+      }
+
+      for(const [r,row] of allCells){ G.mults[r][row]++; G.grid[r][row]=null; }
+      G.spinWin+=roundWin;
+
+      if(round===1) setLog(`${clusters.map(c=>`${SYM[c.sym].e}×${c.cells.length}`).join(' · ')} — WIN ${roundWin.toFixed(2)}`,true);
+      else          setLog(`CASCADE ${round-1} · WIN ${roundWin.toFixed(2)}`,true);
+
+      await cascadeDown(allCells);
+    }
+  }
+
+  // ── Resolve ──
+  if(G.spinWin>0){
+    G.balance+=G.spinWin; G.sessionWin+=G.spinWin;
+    flashWin(G.spinWin);
+    setLog(`MISSION COMPLETE — SPIN WIN: ${G.spinWin.toFixed(2)}`);
+  } else setLog('NO CLUSTERS FOUND. REDEPLOY.');
+
+  if(G.inFS){
+    G.freeSpins--;
+    if(G.freeSpins<=0){
+      G.inFS=false; G.freeSpins=0;
+      G.mults=HEIGHTS.map(h=>Array(h).fill(1));
+      for(let r=0;r<REELS;r++) for(let row=0;row<HEIGHTS[r];row++) updateCell(r,row);
+      setLog('FREE SPINS COMPLETE — RETURNING TO BASE',true);
+      updateHUD();
+      await sleep(1600);
+    }
+  }
+
+  updateHUD();
+  G.busy=false;
+  document.getElementById('spinBtn').disabled=false;
+
+  if(G.inFS&&G.freeSpins>0){ await sleep(600); spin(); }
+}
+
+// ═══════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════
+document.getElementById('spinBtn').addEventListener('click',spin);
+document.getElementById('betUp').addEventListener('click',()=>{
+  if(G.betIdx<BET_STEPS.length-1){G.betIdx++;G.bet=BET_STEPS[G.betIdx];document.getElementById('betVal').textContent=G.bet.toFixed(2);}
+});
+document.getElementById('betDown').addEventListener('click',()=>{
+  if(G.betIdx>0){G.betIdx--;G.bet=BET_STEPS[G.betIdx];document.getElementById('betVal').textContent=G.bet.toFixed(2);}
+});
+document.getElementById('ptToggle').addEventListener('click',()=>{
+  const pt=document.getElementById('paytable');
+  const open=pt.classList.toggle('open');
+  document.getElementById('ptToggle').textContent=(open?'▲':'▼')+' PAYTABLE';
+});
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+G.grid  = HEIGHTS.map((h,r)=>Array.from({length:h},(_,row)=>drawSym(r,false)));
+G.mults = HEIGHTS.map(h=>Array(h).fill(1));
+renderGrid();
+updateHUD();
+</script>
+</body>
+</html>
