@@ -921,26 +921,39 @@ async function spin(){
     anyAction=false;
     round++;
 
-    // 1. Bombs
+    // 1. Bombs — all detonate simultaneously in a single pass.
+    // Union the blast zones of every bomb present so no bomb can suppress
+    // another before it fires. Each bomb self-destructs via its own
+    // bombCells() footprint; SCATTER is the only immune symbol.
     const bombs=findBombs();
     if(bombs.length>0){
       anyAction=true;
-      for(const b of bombs){
-        const cells=bombCells(b);
-        setLog(`${b.type==='SUPER_BOMB'?'☢️ SUPER BOMB':'💣 BOMB'} DETONATED!`,true);
-        sfxBomb();
-        animCells([[b.reel,b.row]],'anim-bomb',520);
-        await sleep(180);
-        // Scatter symbols survive bomb blasts — filter them out before clearing
-        const blastCells=cells.filter(([r,row])=>G.grid[r][row]!=='SCATTER');
-        animCells(blastCells,'anim-bomb',460);
-        await sleep(250);
-        const clearedByBomb=[];
-        for(const [r,row] of blastCells){
-          if(G.grid[r][row]!==null){ G.mults[r][row]++; G.grid[r][row]=null; clearedByBomb.push([r,row]); }
-        }
-        await cascadeDown(clearedByBomb);
+      const blastMap=new Map();
+      for(const b of bombs)
+        for(const [r,row] of bombCells(b))
+          blastMap.set(`${r},${row}`,[r,row]);
+
+      const hasSuperBomb=bombs.some(b=>b.type==='SUPER_BOMB');
+      const bombLabel=hasSuperBomb?'☢️ SUPER BOMB':
+                      bombs.length>1?`💣 ${bombs.length}× BOMBS`:'💣 BOMB';
+      setLog(`${bombLabel} DETONATED!`,true);
+      sfxBomb();
+      animCells(bombs.map(b=>[b.reel,b.row]),'anim-bomb',520);
+      await sleep(180);
+
+      // SCATTER survives; everything else (including the bombs themselves,
+      // which appear in their own bombCells footprint) is cleared.
+      const blastCells=[...blastMap.values()]
+        .filter(([r,row])=>G.grid[r][row]!=='SCATTER');
+
+      animCells(blastCells,'anim-bomb',460);
+      await sleep(250);
+
+      const clearedByBomb=[];
+      for(const [r,row] of blastCells){
+        if(G.grid[r][row]!==null){ G.mults[r][row]++; G.grid[r][row]=null; clearedByBomb.push([r,row]); }
       }
+      await cascadeDown(clearedByBomb);
     }
 
     // 2. Clusters
