@@ -67,6 +67,73 @@ h1 {
 @keyframes winAppear { 0%{transform:scale(0.4);opacity:0} 65%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
 .win-flash.show { animation:winAppear 0.35s ease-out; }
 
+/* ── WIN POPUP OVERLAY ── */
+#winPopup {
+  display:none; position:fixed; inset:0; z-index:50;
+  align-items:center; justify-content:center;
+  pointer-events:none;
+}
+#winPopup.show { display:flex; }
+
+@keyframes popIn {
+  0%   { transform:scale(0.55) translateY(12px); opacity:0; }
+  62%  { transform:scale(1.06) translateY(-3px); opacity:1; }
+  80%  { transform:scale(0.97) translateY(1px); }
+  100% { transform:scale(1)    translateY(0);   opacity:1; }
+}
+@keyframes popOut {
+  0%   { transform:scale(1);    opacity:1; }
+  100% { transform:scale(0.88); opacity:0; }
+}
+.win-popup-card {
+  text-align:center;
+  background:linear-gradient(160deg,#0d1c0a,#09100a);
+  border:2px solid var(--border); border-radius:4px;
+  padding:24px 52px 20px;
+  box-shadow:0 0 80px rgba(0,0,0,0.75),inset 0 0 40px rgba(0,0,0,0.5);
+  animation:popIn 0.48s cubic-bezier(0.22,1,0.36,1) forwards;
+}
+#winPopup.out .win-popup-card { animation:popOut 0.35s ease-in forwards; }
+
+.win-popup-tier {
+  font-family:'Russo One',sans-serif; font-size:2.2rem;
+  letter-spacing:0.18em; text-transform:uppercase; line-height:1;
+  margin-bottom:10px;
+}
+.win-popup-amount {
+  font-family:'Share Tech Mono',monospace; font-size:0.82rem;
+  letter-spacing:0.14em; color:var(--green-dim);
+}
+.win-popup-mult {
+  font-family:'Russo One',sans-serif; font-size:1.05rem;
+  letter-spacing:0.12em; margin-top:5px;
+}
+
+/* tier: low — green (2–9×) */
+#winPopup[data-tier="low"] .win-popup-card { border-color:var(--green-mid); }
+#winPopup[data-tier="low"] .win-popup-tier { color:var(--green); text-shadow:0 0 20px rgba(77,255,110,0.4); }
+#winPopup[data-tier="low"] .win-popup-mult { color:var(--green-dim); }
+
+/* tier: mid — bright green (10–24×) */
+#winPopup[data-tier="mid"] .win-popup-card { border-color:#4aaa2a; box-shadow:0 0 80px rgba(0,0,0,0.75),0 0 32px rgba(77,255,110,0.1),inset 0 0 40px rgba(0,0,0,0.5); }
+#winPopup[data-tier="mid"] .win-popup-tier { color:var(--green); text-shadow:0 0 28px rgba(77,255,110,0.7); }
+#winPopup[data-tier="mid"] .win-popup-mult { color:var(--green); }
+
+/* tier: hi — amber (25–49×) */
+#winPopup[data-tier="hi"] .win-popup-card  { border-color:var(--amber-dim); box-shadow:0 0 80px rgba(0,0,0,0.75),0 0 40px rgba(255,184,0,0.12),inset 0 0 40px rgba(0,0,0,0.5); }
+#winPopup[data-tier="hi"] .win-popup-tier  { color:var(--amber); text-shadow:0 0 28px rgba(255,184,0,0.65); }
+#winPopup[data-tier="hi"] .win-popup-mult  { color:var(--amber); }
+
+/* tier: mega — full amber (50–99×) */
+#winPopup[data-tier="mega"] .win-popup-card { border-color:var(--amber); box-shadow:0 0 80px rgba(0,0,0,0.75),0 0 60px rgba(255,184,0,0.22),inset 0 0 40px rgba(0,0,0,0.5); }
+#winPopup[data-tier="mega"] .win-popup-tier { color:var(--amber); text-shadow:0 0 40px rgba(255,184,0,0.9),0 0 80px rgba(255,184,0,0.35); }
+#winPopup[data-tier="mega"] .win-popup-mult { color:var(--amber); }
+
+/* tier: insane — red (100×+) */
+#winPopup[data-tier="insane"] .win-popup-card { border-color:var(--red); box-shadow:0 0 80px rgba(0,0,0,0.75),0 0 80px rgba(255,62,42,0.3),inset 0 0 40px rgba(0,0,0,0.5); }
+#winPopup[data-tier="insane"] .win-popup-tier { color:var(--red); text-shadow:0 0 40px rgba(255,62,42,0.9),0 0 100px rgba(255,62,42,0.4); }
+#winPopup[data-tier="insane"] .win-popup-mult { color:#ff8070; }
+
 /* ── GRID WRAP ── */
 .grid-wrap {
   position:relative; background:var(--panel); border:1px solid var(--border);
@@ -278,6 +345,15 @@ h1 {
 
 <div class="fs-banner" id="fsBanner">🎖️ FREE SPINS — <span id="fsNum">0</span> REMAINING</div>
 <div class="win-flash" id="winFlash"></div>
+
+<!-- ── WIN POPUP OVERLAY ── -->
+<div id="winPopup">
+  <div class="win-popup-card">
+    <div class="win-popup-tier"   id="winPopupTier"></div>
+    <div class="win-popup-amount" id="winPopupAmount"></div>
+    <div class="win-popup-mult"   id="winPopupMult"></div>
+  </div>
+</div>
 
 <div class="grid-wrap">
   <div class="grid" id="grid"></div>
@@ -618,6 +694,34 @@ function flashWin(amount){
   } else el.textContent='';
 }
 
+// ── WIN POPUP ──────────────────────────────
+const WIN_TIERS=[
+  {min:100, key:'insane', label:'TOTAL ANNIHILATION'},
+  {min:50,  key:'mega',   label:'DEVASTATING BLOW'  },
+  {min:25,  key:'hi',     label:'CRITICAL STRIKE'   },
+  {min:10,  key:'mid',    label:'DIRECT HIT'        },
+  {min:2,   key:'low',    label:'GOOD HIT'          },
+];
+let _winPopupTimer=null;
+function showWinPopup(amount,bet){
+  const tier=WIN_TIERS.find(t=>amount/bet>=t.min);
+  if(!tier) return; // < 2× — silent
+  const popup=document.getElementById('winPopup');
+  if(_winPopupTimer){ clearTimeout(_winPopupTimer); _winPopupTimer=null; }
+  popup.classList.remove('out','show');
+  void popup.offsetWidth; // force reflow so animations restart cleanly
+  document.getElementById('winPopupTier').textContent   = tier.label;
+  document.getElementById('winPopupAmount').textContent = `+ ${amount.toFixed(2)} CREDITS`;
+  document.getElementById('winPopupMult').textContent   = `${(amount/bet).toFixed(1)}× BET`;
+  popup.dataset.tier=tier.key;
+  popup.classList.add('show');
+  // Begin exit animation at 1 900ms → fully gone by ~2 250ms
+  _winPopupTimer=setTimeout(()=>{
+    popup.classList.add('out');
+    _winPopupTimer=setTimeout(()=>{ popup.classList.remove('show','out'); _winPopupTimer=null; },360);
+  },1900);
+}
+
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 // ═══════════════════════════════════════════
@@ -871,6 +975,7 @@ async function spin(){
   if(G.spinWin>0){
     G.balance+=G.spinWin; G.sessionWin+=G.spinWin;
     flashWin(G.spinWin);
+    showWinPopup(G.spinWin,G.bet);
     setLog(`MISSION COMPLETE — SPIN WIN: ${G.spinWin.toFixed(2)}`);
   } else setLog('NO CLUSTERS FOUND. REDEPLOY.');
 
