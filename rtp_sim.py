@@ -21,10 +21,12 @@ Output
 
 from __future__ import annotations
 
+import multiprocessing
+import os
 import random
 import sys
 import time
-from collections import deque, defaultdict
+from collections import deque
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -439,110 +441,127 @@ def simulate_spin(
 
 
 # ═══════════════════════════════════════════════════════════════════════
-#  FULL SIMULATION
+#  MULTIPROCESSING WORKER
+#  Must be a top-level function so it is picklable on all platforms
+#  (Windows uses spawn, not fork, so nested/lambda functions fail).
 # ═══════════════════════════════════════════════════════════════════════
 
-def run_simulation(n_spins: int = 10_000_000) -> None:
-    total_wagered   = 0.0
-    total_won       = 0.0
-    spins_with_win  = 0
-    max_win_mult    = 0.0   # highest single-session win / bet
+def _worker(args: tuple) -> dict:
+    """Run a batch of spins and return aggregated stats as a plain dict."""
+    batch_size, seed = args
+    random.seed(seed)
 
-    fs_triggers     = 0
-    total_fs_spins  = 0
-
-    cascade_dist:   dict[int, int] = defaultdict(int)
-    mult_dist:      dict[int, int] = defaultdict(int)
-
-    total_bombs_det = 0
-    spins_with_bomb = 0
-
-    tier_counts: dict[str, int] = {
+    total_won      = 0.0
+    wins           = 0
+    max_win        = 0.0
+    fs_triggers    = 0
+    total_fs_spins = 0
+    cascade_dist: dict[int, int] = {}
+    mult_dist:    dict[int, int] = {}
+    bombs_det_tot  = 0
+    spins_w_bomb   = 0
+    tiers: dict[str, int] = {
         "<2x": 0, "2-9x": 0, "10-24x": 0,
         "25-49x": 0, "50-99x": 0, "100x+": 0,
     }
 
-    start = time.perf_counter()
-    report_every = max(1, n_spins // 20)
-
-    for spin_num in range(1, n_spins + 1):
-        total_wagered += 1.0   # normalised to 1× bet
-
-        # ── Base spin ──────────────────────────────────────────────
-        result     = simulate_spin(is_fs=False)
+    for _ in range(batch_size):
+        result      = simulate_spin(is_fs=False)
         session_win = result["win"]
-        max_mult_spin = result["max_mult"]
+        mx          = result["max_mult"]
 
-        cascade_dist[result["cascade_depth"]] += 1
+        cd = result["cascade_depth"]
+        cascade_dist[cd] = cascade_dist.get(cd, 0) + 1
+
         if result["bombs_det"] > 0:
-            spins_with_bomb += 1
-            total_bombs_det += result["bombs_det"]
+            spins_w_bomb  += 1
+            bombs_det_tot += result["bombs_det"]
 
-        # ── Free spins trigger ─────────────────────────────────────
+        # ── Free spins trigger ──────────────────────────────────────
         if result["scatters"] >= 3:
             fs_triggers += 1
-            sc = min(result["scatters"], 5)
-            spins_left = FS_TABLE[sc]
-            fs_mults   = result["mults"]   # carry over from triggering spin
+            spins_left   = FS_TABLE[min(result["scatters"], 5)]
+            fs_mults     = result["mults"]
 
             while spins_left > 0:
-                spins_left  -= 1
+                spins_left     -= 1
                 total_fs_spins += 1
 
-                fs_res      = simulate_spin(is_fs=True, mults=fs_mults)
+                fs_res       = simulate_spin(is_fs=True, mults=fs_mults)
                 session_win += fs_res["win"]
-                fs_mults     = fs_res["mults"]   # carry mults forward
+                fs_mults     = fs_res["mults"]
 
-                if fs_res["max_mult"] > max_mult_spin:
-                    max_mult_spin = fs_res["max_mult"]
+                if fs_res["max_mult"] > mx:
+                    mx = fs_res["max_mult"]
                 if fs_res["bombs_det"] > 0:
-                    total_bombs_det += fs_res["bombs_det"]
-
-                # Retrigger
+                    bombs_det_tot += fs_res["bombs_det"]
                 if fs_res["scatters"] >= 3:
                     spins_left += FS_TABLE[min(fs_res["scatters"], 5)]
 
-        # ── Accumulate ─────────────────────────────────────────────
-        total_won     += session_win
-        mult_dist[max_mult_spin] += 1
-
+        # ── Accumulate ──────────────────────────────────────────────
+        total_won += session_win
         if session_win > 0:
-            spins_with_win += 1
-        if session_win > max_win_mult:
-            max_win_mult = session_win
+            wins += 1
+        if session_win > max_win:
+            max_win = session_win
 
-        w = session_win   # already in bet-units
-        if   w >= 100: tier_counts["100x+"]  += 1
-        elif w >= 50:  tier_counts["50-99x"] += 1
-        elif w >= 25:  tier_counts["25-49x"] += 1
-        elif w >= 10:  tier_counts["10-24x"] += 1
-        elif w >= 2:   tier_counts["2-9x"]   += 1
-        else:          tier_counts["<2x"]    += 1
+        mult_dist[mx] = mult_dist.get(mx, 0) + 1
 
-        # ── Progress report ────────────────────────────────────────
-        if spin_num % report_every == 0:
-            elapsed = time.perf_counter() - start
-            pct     = spin_num / n_spins * 100
-            rate    = spin_num / elapsed if elapsed > 0 else 0
-            eta     = (n_spins - spin_num) / rate if rate > 0 else 0
-            rtp_now = total_won / total_wagered * 100
-            print(
-                f"  {pct:5.1f}%  spins={spin_num:>10,}  "
-                f"RTP={rtp_now:.2f}%  rate={rate:,.0f}/s  ETA={eta:.0f}s"
-            )
+        w = session_win
+        if   w >= 100: tiers["100x+"]  += 1
+        elif w >= 50:  tiers["50-99x"] += 1
+        elif w >= 25:  tiers["25-49x"] += 1
+        elif w >= 10:  tiers["10-24x"] += 1
+        elif w >= 2:   tiers["2-9x"]   += 1
+        else:          tiers["<2x"]    += 1
 
-    elapsed = time.perf_counter() - start
+    return {
+        "n":           batch_size,
+        "total_won":   total_won,
+        "wins":        wins,
+        "max_win":     max_win,
+        "fs_triggers": fs_triggers,
+        "fs_spins":    total_fs_spins,
+        "cascade":     cascade_dist,
+        "mults":       mult_dist,
+        "bombs_det":   bombs_det_tot,
+        "bombs_spins": spins_w_bomb,
+        "tiers":       tiers,
+    }
 
-    # ═══════════════════════════════════════════════════════════════
-    #  REPORT
-    # ═══════════════════════════════════════════════════════════════
 
-    rtp          = total_won / total_wagered * 100
-    hit_freq     = spins_with_win / n_spins * 100
-    avg_win      = total_won / n_spins
-    fs_rate      = fs_triggers / n_spins * 100
-    avg_fs       = total_fs_spins / fs_triggers if fs_triggers > 0 else 0.0
-    bomb_freq    = spins_with_bomb / n_spins * 100
+def _merge(total: dict, r: dict) -> None:
+    """Merge a worker result dict into the running total in place."""
+    total["n"]           += r["n"]
+    total["total_won"]   += r["total_won"]
+    total["wins"]        += r["wins"]
+    total["max_win"]      = max(total["max_win"], r["max_win"])
+    total["fs_triggers"] += r["fs_triggers"]
+    total["fs_spins"]    += r["fs_spins"]
+    total["bombs_det"]   += r["bombs_det"]
+    total["bombs_spins"] += r["bombs_spins"]
+    for k, v in r["cascade"].items():
+        total["cascade"][k] = total["cascade"].get(k, 0) + v
+    for k, v in r["mults"].items():
+        total["mults"][k] = total["mults"].get(k, 0) + v
+    for k, v in r["tiers"].items():
+        total["tiers"][k] += v
+
+
+def _print_report(total: dict, elapsed: float) -> None:
+    """Print the final results table (same layout as run_simulation)."""
+    n            = total["n"]
+    total_won    = total["total_won"]
+    rtp          = total_won / n * 100
+    hit_freq     = total["wins"] / n * 100
+    avg_win      = total_won / n
+    fs_triggers  = total["fs_triggers"]
+    fs_rate      = fs_triggers / n * 100
+    avg_fs       = total["fs_spins"] / fs_triggers if fs_triggers > 0 else 0.0
+    bomb_freq    = total["bombs_spins"] / n * 100
+    cascade_dist = total["cascade"]
+    mult_dist    = total["mults"]
+    tier_counts  = total["tiers"]
 
     D = "═" * 58
 
@@ -550,54 +569,46 @@ def run_simulation(n_spins: int = 10_000_000) -> None:
     print(D)
     print("  OPERATION JACKPOT — RTP SIMULATION RESULTS")
     print(D)
-    print(f"  Spins simulated   : {n_spins:>16,}")
+    print(f"  Spins simulated   : {n:>16,}")
     print(f"  Elapsed           : {elapsed:>15.1f}s")
-    print(f"  Throughput        : {n_spins / elapsed:>15,.0f} spins/s")
+    print(f"  Throughput        : {n / elapsed:>15,.0f} spins/s")
     print()
     print(f"  RTP               : {rtp:>15.3f}%")
     print(f"  Hit frequency     : {hit_freq:>15.3f}%  (1 in {100/hit_freq:.1f})")
     print(f"  Avg win / spin    : {avg_win:>15.4f}× bet")
-    print(f"  Max win           : {max_win_mult:>15.1f}× bet")
+    print(f"  Max win           : {total['max_win']:>15.1f}× bet")
     print()
     print(f"  Free spins rate   : {fs_rate:>15.3f}%  (1 in {100/fs_rate:.0f} spins)")
     print(f"  FS triggers       : {fs_triggers:>16,}")
-    print(f"  Total FS played   : {total_fs_spins:>16,}")
+    print(f"  Total FS played   : {total['fs_spins']:>16,}")
     print(f"  Avg FS per trig   : {avg_fs:>15.1f}")
     print()
     print(f"  Spins with bomb   : {bomb_freq:>15.3f}%")
-    print(f"  Total detonations : {total_bombs_det:>16,}")
+    print(f"  Total detonations : {total['bombs_det']:>16,}")
 
-    # Win tier distribution
     print()
     print("  ── Win tier distribution ──────────────────────────")
     for label, count in tier_counts.items():
-        pct = count / n_spins * 100
+        pct = count / n * 100
         bar = "█" * int(pct / 2)
         print(f"  {label:>8}  {count:>11,}  ({pct:5.2f}%)  {bar}")
 
-    # Cascade depth distribution
     print()
     print("  ── Cascade depth distribution ─────────────────────")
     max_depth = max(cascade_dist.keys()) if cascade_dist else 0
     for depth in range(min(max_depth + 1, 16)):
         count = cascade_dist.get(depth, 0)
-        pct   = count / n_spins * 100
-        if depth == 0:
-            label = "  no cascade"
-        elif depth == 1:
-            label = "   1 cascade"
-        else:
-            label = f"  {depth} cascades"
-        bar = "█" * int(pct / 2)
+        pct   = count / n * 100
+        label = "  no cascade" if depth == 0 else f"  {depth} cascade{'s' if depth > 1 else ' '}"
+        bar   = "█" * int(pct / 2)
         print(f"  {label}  {count:>11,}  ({pct:5.2f}%)  {bar}")
     if max_depth >= 16:
         overflow = sum(v for k, v in cascade_dist.items() if k >= 16)
-        print(f"   16+ cascades  {overflow:>11,}  ({overflow / n_spins * 100:5.2f}%)")
+        print(f"   16+ cascades  {overflow:>11,}  ({overflow / n * 100:5.2f}%)")
 
-    # Multiplier peak distribution
     print()
     print("  ── Multiplier peak distribution ───────────────────")
-    max_m = max(mult_dist.keys()) if mult_dist else 1
+    max_m   = max(mult_dist.keys()) if mult_dist else 1
     buckets = [
         (1,  1),  (2,  2),  (3,  4),   (5,   9),
         (10, 19), (20, 49), (50, 99),  (100, max(max_m, 100)),
@@ -606,7 +617,7 @@ def run_simulation(n_spins: int = 10_000_000) -> None:
         count = sum(mult_dist.get(m, 0) for m in range(lo, hi + 1))
         if count == 0:
             continue
-        pct   = count / n_spins * 100
+        pct   = count / n * 100
         label = f"{lo}×" if lo == hi else f"{lo}–{hi}×"
         bar   = "█" * int(pct / 2)
         print(f"  {label:>8}  {count:>11,}  ({pct:5.2f}%)  {bar}")
@@ -615,19 +626,111 @@ def run_simulation(n_spins: int = 10_000_000) -> None:
     print(D)
 
 
+def run_parallel(n_spins: int = 10_000_000, n_workers: int = 0, base_seed: int | None = None) -> None:
+    """
+    Distribute n_spins across n_workers processes using multiprocessing.Pool.
+
+    Strategy
+    --------
+    Split work into (n_workers × 10) chunks so that:
+      - Progress updates arrive frequently (every ~10% of a single worker's load)
+      - Load is balanced even if individual spins vary in duration (FS retriggers)
+      - imap_unordered streams results back as each chunk finishes
+
+    Seeds
+    -----
+    Each chunk gets a unique seed derived from base_seed + chunk_index × large_prime,
+    ensuring statistically independent draws across workers.
+    """
+    if n_workers <= 0:
+        n_workers = os.cpu_count() or 1
+
+    # Build chunk list
+    n_chunks   = n_workers * 10
+    chunk_base = n_spins // n_chunks
+    remainder  = n_spins % n_chunks
+    chunks: list[tuple[int, int]] = []
+    prime = 1_000_003   # large prime to spread seeds
+    for i in range(n_chunks):
+        size = chunk_base + (1 if i < remainder else 0)
+        seed = ((base_seed or 0) + i * prime) & 0xFFFF_FFFF
+        chunks.append((size, seed))
+
+    total: dict = {
+        "n": 0, "total_won": 0.0, "wins": 0, "max_win": 0.0,
+        "fs_triggers": 0, "fs_spins": 0,
+        "cascade": {}, "mults": {},
+        "bombs_det": 0, "bombs_spins": 0,
+        "tiers": {"<2x": 0, "2-9x": 0, "10-24x": 0,
+                  "25-49x": 0, "50-99x": 0, "100x+": 0},
+    }
+
+    print(f"Workers : {n_workers}  (across {n_chunks} chunks)")
+    if base_seed is not None:
+        print(f"Seed    : {base_seed}")
+    print()
+
+    start     = time.perf_counter()
+    completed = 0
+
+    if n_workers == 1:
+        # Skip pool overhead for single-worker runs
+        for chunk_args in chunks:
+            _merge(total, _worker(chunk_args))
+            completed += chunk_args[0]
+            pct  = completed / n_spins * 100
+            rate = completed / (time.perf_counter() - start) if (time.perf_counter() - start) > 0 else 0
+            eta  = (n_spins - completed) / rate if rate > 0 else 0
+            rtp  = total["total_won"] / completed * 100 if completed else 0
+            print(
+                f"\r  {pct:5.1f}%  spins={completed:>10,}"
+                f"  RTP={rtp:.2f}%  rate={rate:,.0f}/s  ETA={eta:.0f}s   ",
+                end="", flush=True,
+            )
+        print()
+    else:
+        with multiprocessing.Pool(processes=n_workers) as pool:
+            for result in pool.imap_unordered(_worker, chunks):
+                _merge(total, result)
+                completed += result["n"]
+                pct  = completed / n_spins * 100
+                rate = completed / (time.perf_counter() - start) if (time.perf_counter() - start) > 0 else 0
+                eta  = (n_spins - completed) / rate if rate > 0 else 0
+                rtp  = total["total_won"] / completed * 100 if completed else 0
+                print(
+                    f"\r  {pct:5.1f}%  spins={completed:>10,}"
+                    f"  RTP={rtp:.2f}%  rate={rate:,.0f}/s  ETA={eta:.0f}s   ",
+                    end="", flush=True,
+                )
+        print()
+
+    elapsed = time.perf_counter() - start
+    _print_report(total, elapsed)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    n    = 10_000_000
-    seed = None
+    # ── Required on Windows: multiprocessing uses spawn (not fork),
+    #    so worker processes re-import this module. Without this guard
+    #    each worker would spawn more workers recursively. ──────────
+    multiprocessing.freeze_support()
+
+    args     = sys.argv[1:]
+    n        = 10_000_000
+    seed     = None
+    workers  = 0   # 0 → auto-detect cpu_count()
 
     i = 0
     while i < len(args):
         if args[i] == "--seed" and i + 1 < len(args):
             seed = int(args[i + 1])
+            i += 2
+        elif args[i] == "--workers" and i + 1 < len(args):
+            val = args[i + 1]
+            workers = 0 if val == "auto" else int(val)
             i += 2
         elif args[i].lstrip("-").lstrip("+").isdigit():
             n = int(args[i])
@@ -635,10 +738,8 @@ if __name__ == "__main__":
         else:
             i += 1
 
-    if seed is not None:
-        random.seed(seed)
-        print(f"Seed: {seed}")
-
-    print(f"Running {n:,} spins…")
+    n_cpu = os.cpu_count() or 1
+    eff_workers = workers if workers > 0 else n_cpu
+    print(f"Running {n:,} spins across {eff_workers} worker(s)…")
     print()
-    run_simulation(n)
+    run_parallel(n_spins=n, n_workers=workers, base_seed=seed)
