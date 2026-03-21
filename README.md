@@ -8,7 +8,7 @@ A military-themed browser slot game built as a single, self-contained HTML file.
 
 - **Cluster Pays** — connect 5 or more matching symbols horizontally or vertically to win
 - **Cascading Symbols** — cleared clusters cause new symbols to drop in, enabling chain reactions
-- **Multiplier Grid** — every cleared cell increments its own multiplier; multipliers stack across cascades and carry into free spins
+- **Multiplier Grid** — every cleared cell increments its multiplier; in free spins each clear **doubles** the multiplier (×2, ×4, ×8…); multipliers carry into free spins making each session exponentially more valuable
 - **Bomb Symbols** — `💣` clears a full row and column; `☢️ Super Bomb` wipes the entire grid
 - **Free Spins Mode** — land 3–5 scatters to trigger 8–20 free spins with persistent, accumulating multipliers
 - **Bonus Buy** — skip straight to free spins for 80× your bet
@@ -33,8 +33,7 @@ cd Operation-Jackpot
 
 | Symbol | Display | Notes |
 |---|---|---|
-| Dog Tags | 🏅 | Most common |
-| Boots | 👟 | |
+| Boots | 👟 | Most common |
 | Pistol | 🔫 | |
 | Rifle | 🎯 | |
 | Grenade | 🧨 | |
@@ -55,14 +54,13 @@ Form clusters of **5 or more** connected matching symbols (horizontal or vertica
 
 | Symbol | ×5 | ×7 | ×9 | ×12 | ×15+ |
 |---|---|---|---|---|---|
-| Dog Tags | 0.3× | 0.6× | 1.0× | 2.0× | 4× |
-| Boots | 0.4× | 0.8× | 1.5× | 3.0× | 6× |
-| Pistol | 0.6× | 1.0× | 2.0× | 4.0× | 8× |
-| Rifle | 0.8× | 1.5× | 3.0× | 6.0× | 12× |
-| Grenade | 1.0× | 2.0× | 4.0× | 8.0× | 16× |
-| Helicopter | 1.5× | 3.0× | 6.0× | 12× | 25× |
-| Tank | 2.0× | 5.0× | 10× | 20× | 50× |
-| Wild cluster | 1.0× | 2.0× | 4.0× | 8.0× | 20× |
+| Boots | 0.05× | 0.10× | 0.20× | 0.40× | 0.80× |
+| Pistol | 0.08× | 0.13× | 0.25× | 0.50× | 1.00× |
+| Rifle | 0.10× | 0.20× | 0.40× | 0.75× | 1.50× |
+| Grenade | 0.13× | 0.25× | 0.50× | 1.00× | 2.00× |
+| Helicopter | 0.20× | 0.40× | 0.75× | 1.50× | 3.00× |
+| Tank | 0.25× | 0.65× | 1.25× | 2.50× | 6.25× |
+| Wild cluster | 0.13× | 0.25× | 0.50× | 1.00× | 2.50× |
 
 Values are linearly interpolated between cluster size tiers.
 
@@ -79,10 +77,10 @@ Bombs are immune to other bombs — each one detonates in sequence rather than b
 
 ### Multiplier Grid
 
-Each cell on the grid has a multiplier that starts at `1×`. Every time a cell is cleared — by a cluster win or a bomb — its multiplier increases by 1. That multiplier is factored directly into any future win from that cell.
+Each cell on the grid has a multiplier that starts at `1×`. Every time a cell is cleared — by a cluster win or a bomb — its multiplier is updated. That multiplier is factored directly into any future win from that cell.
 
-- **Base game:** multipliers reset at the start of every new spin
-- **Free spins:** multipliers carry over from the triggering spin and keep accumulating for the entire session
+- **Base game:** each clear adds `+1` to a cell's multiplier (linear: 1→2→3→4…); resets at the start of every new spin
+- **Free spins:** each clear **doubles** a cell's multiplier (exponential: 1→2→4→8→16…); carries over from the triggering spin and keeps accumulating for the entire session
 
 ### Free Spins
 
@@ -95,7 +93,7 @@ Each cell on the grid has a multiplier that starts at `1×`. Every time a cell i
 Scatter symbols count after all cascades resolve, so scatters that drop in during a cascade chain count toward the trigger.
 
 - Multipliers carry over and **accumulate** throughout the session — a multiplier built in the base game survives into free spins
-- Bombs are replaced by Super Bombs (higher spawn rate)
+- Bombs are replaced by Super Bombs (higher spawn rate); multipliers **double** on every clear instead of +1
 - Landing 3+ scatters during free spins adds another batch of free spins
 - A total win popup is shown when the session ends
 
@@ -123,6 +121,7 @@ Click **🎖 BUY BONUS** to guarantee at least 3 scatter symbols on the next spi
 
 ```
 operation-jackpot.html   # Entire game — markup, CSS, and JS in one file
+rtp_sim.py               # Python RTP simulation (multiprocessing, mirrors JS logic)
 CLAUDE.md                # Developer spec and architecture guide
 README.md                # This file
 ```
@@ -137,8 +136,9 @@ The game is intentionally kept as a single self-contained file for maximum porta
 - [x] Free spins mode — 3/4/5 scatters trigger 8/12/20 free spins; persistent multipliers; super bombs
 - [x] Win messages — thematic overlay text scaled to win size
 - [x] Bonus buy — purchase direct free spins entry at 80× bet
-- [ ] Python RTP simulation — simulate 10M+ spins to verify RTP, hit frequency, and cascade depth
-- [ ] RTP fine-tuning — adjust weights and paytable to hit target RTP (~95%)
+- [x] Python RTP simulation — multiprocessing sim; 10M spins in ~3 min; full stats report
+- [x] RTP tuning — paytable reduced ÷8; DOG_TAGS removed; FS multiplier doubling; target ~95%
+- [ ] RTP verification — run 10M sim with current values and fine-tune if outside 93–97%
 - [ ] Mobile layout — responsive scaling for smaller screens
 
 ---

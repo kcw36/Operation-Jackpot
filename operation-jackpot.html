@@ -405,7 +405,6 @@ h1 {
 
     <div class="modal-section-hdr">Symbols</div>
     <div class="legend">
-      <div class="leg">🏅 Dog Tags</div>
       <div class="leg">👟 Boots</div><div class="leg">🔫 Pistol</div>
       <div class="leg">🎯 Rifle</div><div class="leg">🧨 Grenade</div>
       <div class="leg">🚁 Helicopter</div><div class="leg">⚙️ Tank (rare)</div>
@@ -419,14 +418,13 @@ h1 {
     <div class="paytable">
       <table>
         <tr><th>Symbol</th><th>×5</th><th>×7</th><th>×9</th><th>×12</th><th>×15+</th></tr>
-        <tr><td>🏅 Dog Tags</td>   <td>0.3</td><td>0.6</td><td>1.0</td><td>2.0</td><td>4</td></tr>
-        <tr><td>👟 Boots</td>      <td>0.4</td><td>0.8</td><td>1.5</td><td>3.0</td><td>6</td></tr>
-        <tr><td>🔫 Pistol</td>     <td>0.6</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8</td></tr>
-        <tr><td>🎯 Rifle</td>      <td>0.8</td><td>1.5</td><td>3.0</td><td>6.0</td><td>12</td></tr>
-        <tr><td>🧨 Grenade</td>    <td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>16</td></tr>
-        <tr><td>🚁 Helicopter</td> <td>1.5</td><td>3.0</td><td>6.0</td><td>12</td><td>25</td></tr>
-        <tr><td>⚙️ Tank</td>       <td>2.0</td><td>5.0</td><td>10</td><td>20</td><td>50</td></tr>
-        <tr><td>W Wild cluster</td><td>1.0</td><td>2.0</td><td>4.0</td><td>8.0</td><td>20</td></tr>
+        <tr><td>👟 Boots</td>      <td>0.05</td><td>0.10</td><td>0.20</td><td>0.40</td><td>0.80</td></tr>
+        <tr><td>🔫 Pistol</td>     <td>0.08</td><td>0.13</td><td>0.25</td><td>0.50</td><td>1.00</td></tr>
+        <tr><td>🎯 Rifle</td>      <td>0.10</td><td>0.20</td><td>0.40</td><td>0.75</td><td>1.50</td></tr>
+        <tr><td>🧨 Grenade</td>    <td>0.13</td><td>0.25</td><td>0.50</td><td>1.00</td><td>2.00</td></tr>
+        <tr><td>🚁 Helicopter</td> <td>0.20</td><td>0.40</td><td>0.75</td><td>1.50</td><td>3.00</td></tr>
+        <tr><td>⚙️ Tank</td>       <td>0.25</td><td>0.65</td><td>1.25</td><td>2.50</td><td>6.25</td></tr>
+        <tr><td>W Wild cluster</td><td>0.13</td><td>0.25</td><td>0.50</td><td>1.00</td><td>2.50</td></tr>
       </table>
     </div>
 
@@ -435,7 +433,7 @@ h1 {
       <b style="color:var(--green-mid);">Win</b> = Paytable × Bet × Σ(cell multipliers in cluster)<br>
       <b style="color:var(--green-mid);">Cluster</b> — 5+ connected matching symbols (H/V only). Wilds substitute for any regular symbol and also form their own pure-wild clusters.<br>
       <b style="color:var(--green-mid);">Cascade</b> — cleared symbols fall away; new symbols drop from the top. Repeats until no bombs or clusters remain.<br>
-      <b style="color:var(--green-mid);">Multipliers</b> — each cleared cell gains +1×. Persist across cascades. Carry into and accumulate throughout Free Spins. Reset when Free Spins end.<br>
+      <b style="color:var(--green-mid);">Multipliers</b> — each cleared cell gains +1× in base game. In Free Spins each cleared cell <em>doubles</em> (×2, ×4, ×8…). Persist across cascades. Carry into and accumulate throughout Free Spins. Reset when Free Spins end.<br>
       <b style="color:var(--green-mid);">Free Spins</b> — triggered by 3/4/5 🚩 on reels 2–5 (awards 8/12/20 spins). Retriggerable. Bombs replaced by Super Bombs.<br>
       <b style="color:var(--green-mid);">Scatter</b> — only spawns on reels 2–5.
     </div>
@@ -453,28 +451,26 @@ const MIN_CLUSTER = 5;
 const STEP        = 70; // cell(68) + gap(2)
 
 const SYM = {
-  DOG_TAGS:   {e:'🏅', w:18},
   BOOTS:      {e:'👟', w:16},
   PISTOL:     {e:'🔫', w:14},
   RIFLE:      {e:'🎯', w:12},
   GRENADE:    {e:'🧨', w:10},
   HELICOPTER: {e:'🚁', w:7},
   TANK:       {e:'⚙️', w:5},
-  WILD:       {e:'W', w:3,  special:'wild'},
+  WILD:       {e:'W', w:2,  special:'wild'},
   SCATTER:    {e:'🚩', w:2,  special:'scatter'},
-  BOMB:       {e:'💣', w:1,  special:'bomb'},
-  SUPER_BOMB: {e:'☢️', w:0.5,special:'superbomb'},
+  BOMB:       {e:'💣', w:0.3,special:'bomb'},
+  SUPER_BOMB: {e:'☢️', w:0.3,special:'superbomb'},
 };
 
 const PAY = {
-  DOG_TAGS:   {5:0.3,7:0.6,  9:1.0,  12:2.0,  15:4  },
-  BOOTS:      {5:0.4,7:0.8,  9:1.5,  12:3.0,  15:6  },
-  PISTOL:     {5:0.6,7:1.0,  9:2.0,  12:4.0,  15:8  },
-  RIFLE:      {5:0.8,7:1.5,  9:3.0,  12:6.0,  15:12 },
-  GRENADE:    {5:1.0,7:2.0,  9:4.0,  12:8.0,  15:16 },
-  HELICOPTER: {5:1.5,7:3.0,  9:6.0,  12:12,   15:25 },
-  TANK:       {5:2.0,7:5.0,  9:10,   12:20,   15:50 },
-  WILD:       {5:1.0,7:2.0,  9:4.0,  12:8.0,  15:20 },
+  BOOTS:      {5:0.05,7:0.10,9:0.20,12:0.40,15:0.80},
+  PISTOL:     {5:0.08,7:0.13,9:0.25,12:0.50,15:1.00},
+  RIFLE:      {5:0.10,7:0.20,9:0.40,12:0.75,15:1.50},
+  GRENADE:    {5:0.13,7:0.25,9:0.50,12:1.00,15:2.00},
+  HELICOPTER: {5:0.20,7:0.40,9:0.75,12:1.50,15:3.00},
+  TANK:       {5:0.25,7:0.65,9:1.25,12:2.50,15:6.25},
+  WILD:       {5:0.13,7:0.25,9:0.50,12:1.00,15:2.50},
 };
 
 const FS_TABLE        = {3:8,4:12,5:20};
@@ -506,7 +502,7 @@ function drawSym(reel,isFS) {
     if(key==='SCATTER'&&(reel<1||reel>4)) continue;
     if(key==='BOMB'&&isFS) continue;
     let w=s.w;
-    if(isFS&&key==='SUPER_BOMB') w=3;
+    if(isFS&&key==='SUPER_BOMB') w=1.0;
     pool.push([key,w]);
   }
   return weightedDraw(pool);
@@ -961,7 +957,10 @@ async function spin(){
         roundWin+=basePay*G.bet*multSum;
       }
 
-      for(const [r,row] of allCells){ G.mults[r][row]++; G.grid[r][row]=null; }
+      for(const [r,row] of allCells){
+        G.mults[r][row] = G.inFS ? Math.min(G.mults[r][row]*2,1024) : G.mults[r][row]+1;
+        G.grid[r][row]=null;
+      }
       G.spinWin+=roundWin;
 
       if(round===1) setLog(`${clusters.map(c=>`${SYM[c.sym].e}×${c.cells.length}`).join(' · ')} — WIN ${roundWin.toFixed(2)}`,true);
@@ -1014,7 +1013,10 @@ async function spin(){
 
       const clearedByBomb=[];
       for(const [r,row] of blastCells){
-        if(G.grid[r][row]!==null){ G.mults[r][row]++; G.grid[r][row]=null; clearedByBomb.push([r,row]); }
+        if(G.grid[r][row]!==null){
+          G.mults[r][row] = G.inFS ? Math.min(G.mults[r][row]*2,1024) : G.mults[r][row]+1;
+          G.grid[r][row]=null; clearedByBomb.push([r,row]);
+        }
       }
       await cascadeDown(clearedByBomb);
 

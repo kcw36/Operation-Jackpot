@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Operation Jackpot** is a military-themed HTML/JS slot game prototype built as a single self-contained file (`operation-jackpot.html`). It uses a cluster pays mechanic with cascading symbols on a 6-reel asymmetric diamond grid. The current build is a fully browser-playable prototype with free spins, bombs, a multiplier grid, win popups, and a bonus buy feature. The next planned phase is a Python RTP simulation.
+**Operation Jackpot** is a military-themed HTML/JS slot game prototype built as a single self-contained file (`operation-jackpot.html`). It uses a cluster pays mechanic with cascading symbols on a 6-reel asymmetric diamond grid. The current build is a fully browser-playable prototype with free spins, bombs, a multiplier grid, win popups, and a bonus buy feature. A Python RTP simulation (`rtp_sim.py`) mirrors the JS logic and has been used to tune the game to a target RTP of ~95%.
 
 ---
 
@@ -26,17 +26,16 @@ All game logic, animation, styling, and markup live in this one file. Do not spl
 
 | Key | Display | Weight | Notes |
 |---|---|---|---|
-| DOG_TAGS | 🏅 | 18 | Most common |
-| BOOTS | 👟 | 16 | |
+| BOOTS | 👟 | 16 | Most common |
 | PISTOL | 🔫 | 14 | |
 | RIFLE | 🎯 | 12 | |
 | GRENADE | 🧨 | 10 | |
 | HELICOPTER | 🚁 | 7 | |
 | TANK | ⚙️ | 5 | Rarest regular symbol |
-| WILD | W | 3 | Substitutes for regular symbols; can also form its own pure-wild clusters |
+| WILD | W | 2 | Substitutes for regular symbols; can also form its own pure-wild clusters |
 | SCATTER | 🚩 | 2 | Only spawns on reels 2–5 (index 1–4); weight=0 on reels 1 & 6 |
-| BOMB | 💣 | 1 | Explodes entire row + column of its position; replaced by SUPER_BOMB in free spins |
-| SUPER_BOMB | ☢️ | 0.5 | Clears entire grid; weight increases to 3 in free spins |
+| BOMB | 💣 | 0.3 | Explodes entire row + column of its position; replaced by SUPER_BOMB in free spins |
+| SUPER_BOMB | ☢️ | 0.3 | Clears entire grid; weight increases to 1.0 in free spins |
 
 ### Wild Behaviour
 - Wilds join clusters of matching regular symbols (acts as that symbol)
@@ -46,16 +45,17 @@ All game logic, animation, styling, and markup live in this one file. Do not spl
 
 ### Paytable (× bet multiplier, interpolated smoothly between tiers)
 
+Values tuned to target ~95% RTP with the majority of return delivered through free spins.
+
 | Symbol | ×5 | ×7 | ×9 | ×12 | ×15+ |
 |---|---|---|---|---|---|
-| DOG_TAGS | 0.3 | 0.6 | 1.0 | 2.0 | 4 |
-| BOOTS | 0.4 | 0.8 | 1.5 | 3.0 | 6 |
-| PISTOL | 0.6 | 1.0 | 2.0 | 4.0 | 8 |
-| RIFLE | 0.8 | 1.5 | 3.0 | 6.0 | 12 |
-| GRENADE | 1.0 | 2.0 | 4.0 | 8.0 | 16 |
-| HELICOPTER | 1.5 | 3.0 | 6.0 | 12 | 25 |
-| TANK | 2.0 | 5.0 | 10 | 20 | 50 |
-| WILD (pure cluster) | 1.0 | 2.0 | 4.0 | 8.0 | 20 |
+| BOOTS | 0.05 | 0.10 | 0.20 | 0.40 | 0.80 |
+| PISTOL | 0.08 | 0.13 | 0.25 | 0.50 | 1.00 |
+| RIFLE | 0.10 | 0.20 | 0.40 | 0.75 | 1.50 |
+| GRENADE | 0.13 | 0.25 | 0.50 | 1.00 | 2.00 |
+| HELICOPTER | 0.20 | 0.40 | 0.75 | 1.50 | 3.00 |
+| TANK | 0.25 | 0.65 | 1.25 | 2.50 | 6.25 |
+| WILD (pure cluster) | 0.13 | 0.25 | 0.50 | 1.00 | 2.50 |
 
 **Interpolation rule:** For cluster sizes between tier breakpoints, linearly interpolate between the two surrounding tiers. Cap at the ×15 value for clusters of 15+.
 
@@ -63,7 +63,8 @@ All game logic, animation, styling, and markup live in this one file. Do not spl
 
 ### Multiplier Grid
 - Every cell starts at `1×`
-- Each time a cell is cleared — whether by cluster win or bomb explosion — its multiplier increments by `+1`
+- **Base game:** each time a cell is cleared, its multiplier increments by `+1` (linear: 1→2→3→4…)
+- **Free spins:** each time a cell is cleared, its multiplier **doubles** (exponential: 1→2→4→8→16…); capped at `1024×`
 - Multipliers persist across all cascades within a spin
 - **Base game:** multipliers reset to `1×` at the start of each new spin
 - **Free spins:** multipliers persist and accumulate for the entire free spins session; they carry over from the triggering spin
@@ -73,7 +74,7 @@ All game logic, animation, styling, and markup live in this one file. Do not spl
 - **BOMB** (`💣`): on detonation, clears all cells in the bomb's row AND the bomb's column; increments multiplier on every cleared cell; explosion radiates outward from the epicentre with staggered delay
 - **SUPER_BOMB** (`☢️`): clears the entire grid simultaneously; increments multiplier on every cell
 - Bombs are immune to each other's blasts (like SCATTER); they survive and detonate in a subsequent pass
-- In free spins, BOMB does not spawn — SUPER_BOMB takes its slot with increased weight (3)
+- In free spins, BOMB does not spawn — SUPER_BOMB takes its slot with increased weight (1.0)
 
 ### Cascade Order (per round, repeats until no action)
 1. Find all qualifying clusters (5+), highlight and pay them
@@ -199,11 +200,9 @@ G = {
 
 ## Planned Next Steps (in priority order)
 
-1. **Python RTP Simulation** — a separate `rtp_sim.py` script that simulates N spins (target: 10M+) and reports RTP, hit frequency, average win, max win, free spins trigger rate, cascade depth distribution, and multiplier value distribution. Should mirror the JS logic exactly (same HEIGHTS, weights, paytable, cluster detection, bomb mechanics, cascade loop, multiplier system, free spins rules).
+1. **RTP Verification** — run `python rtp_sim.py 10000000` with the current tuned values and confirm RTP is in the 93–97% range. Fine-tune paytable if needed: reduce BOOTS/PISTOL/RIFLE ×5 values by ~10% if RTP > 97%; increase HELICOPTER/TANK ×15 values by ~15% if RTP < 93%.
 
-2. **RTP Fine-Tuning** — after running the simulation, adjust symbol weights and/or paytable values to hit a target RTP (typically 94–97% for slots of this type). Document the final tuned values in this file and in the paytable HTML.
-
-3. **Mobile layout** — responsive scaling so the grid fits smaller screens without scrolling.
+2. **Mobile layout** — responsive scaling so the grid fits smaller screens without scrolling.
 
 ---
 
@@ -223,11 +222,7 @@ G = {
 
 ```
 operation-jackpot.html    ← entire game (markup + CSS + JS)
+rtp_sim.py                ← Python RTP simulation (mirrors JS logic; multiprocessing)
 CLAUDE.md                 ← this file
 README.md                 ← player-facing description
-```
-
-Future files to add:
-```
-rtp_sim.py                ← Python math/RTP simulation
 ```

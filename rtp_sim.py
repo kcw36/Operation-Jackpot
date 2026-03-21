@@ -28,6 +28,10 @@ import sys
 import time
 from collections import deque
 
+# Force UTF-8 output on Windows (avoids cp1252 UnicodeEncodeError for box chars)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  CONFIG  —  mirrors JS constants exactly
@@ -40,30 +44,32 @@ MIN_CLUSTER = 5
 TOTAL_CELLS = sum(HEIGHTS)   # 26
 
 # Symbol weights (base game)
+# DOG_TAGS removed — shifts cluster frequency toward higher-paying symbols
 SYM_WEIGHTS: dict[str, float] = {
-    "DOG_TAGS":    18.0,
     "BOOTS":       16.0,
     "PISTOL":      14.0,
     "RIFLE":       12.0,
     "GRENADE":     10.0,
     "HELICOPTER":   7.0,
     "TANK":         5.0,
-    "WILD":         3.0,
+    "WILD":         2.0,   # reduced from 3 to lower base hit frequency
     "SCATTER":      2.0,
-    "BOMB":         1.0,
-    "SUPER_BOMB":   0.5,
+    "BOMB":         0.3,
+    "SUPER_BOMB":   0.3,
 }
 
 # Paytable: symbol → {cluster_size: multiplier_of_bet}
+# Values reduced ~÷8 from original to target ~95% RTP.
+# Base game multipliers are +1 per clear (linear); FS multipliers double
+# per clear (exponential) — see simulate_spin() for gating logic.
 PAY: dict[str, dict[int, float]] = {
-    "DOG_TAGS":   {5: 0.3,  7: 0.6,  9: 1.0,  12: 2.0,  15: 4.0 },
-    "BOOTS":      {5: 0.4,  7: 0.8,  9: 1.5,  12: 3.0,  15: 6.0 },
-    "PISTOL":     {5: 0.6,  7: 1.0,  9: 2.0,  12: 4.0,  15: 8.0 },
-    "RIFLE":      {5: 0.8,  7: 1.5,  9: 3.0,  12: 6.0,  15: 12.0},
-    "GRENADE":    {5: 1.0,  7: 2.0,  9: 4.0,  12: 8.0,  15: 16.0},
-    "HELICOPTER": {5: 1.5,  7: 3.0,  9: 6.0,  12: 12.0, 15: 25.0},
-    "TANK":       {5: 2.0,  7: 5.0,  9: 10.0, 12: 20.0, 15: 50.0},
-    "WILD":       {5: 1.0,  7: 2.0,  9: 4.0,  12: 8.0,  15: 20.0},
+    "BOOTS":      {5: 0.05, 7: 0.10, 9: 0.20, 12: 0.40, 15: 0.80},
+    "PISTOL":     {5: 0.08, 7: 0.13, 9: 0.25, 12: 0.50, 15: 1.00},
+    "RIFLE":      {5: 0.10, 7: 0.20, 9: 0.40, 12: 0.75, 15: 1.50},
+    "GRENADE":    {5: 0.13, 7: 0.25, 9: 0.50, 12: 1.00, 15: 2.00},
+    "HELICOPTER": {5: 0.20, 7: 0.40, 9: 0.75, 12: 1.50, 15: 3.00},
+    "TANK":       {5: 0.25, 7: 0.65, 9: 1.25, 12: 2.50, 15: 6.25},
+    "WILD":       {5: 0.13, 7: 0.25, 9: 0.50, 12: 1.00, 15: 2.50},
 }
 
 PAY_TIERS = [5, 7, 9, 12, 15]
@@ -92,7 +98,7 @@ def _build_pool(reel: int, is_fs: bool) -> tuple[list[str], list[float]]:
             continue
         if key == "BOMB" and is_fs:
             continue
-        eff = 3.0 if (is_fs and key == "SUPER_BOMB") else w
+        eff = 1.0 if (is_fs and key == "SUPER_BOMB") else w
         total += eff
         keys.append(key)
         cumulative.append(total)
@@ -385,8 +391,18 @@ def simulate_spin(
     bombs_det = 0
     max_mult  = max(m for col in mults for m in col)
 
+    # Safety caps — prevent runaway chains.
+    # In free spins, SUPER_BOMB weight=3 gives ~0.9 expected new bombs per
+    # 26-cell refill (close to 1), so chain lengths can be arbitrarily long
+    # with non-zero probability. Cap detonations per spin at 200 and outer
+    # cascade rounds at 100 to bound simulation time while still capturing
+    # all practically reachable states.
+    MAX_BOMB_DET   = 200
+    MAX_ROUNDS     = 100
+    MULT_CAP       = 1024   # FS doubling cap — prevents extreme outliers
+
     any_action = True
-    while any_action:
+    while any_action and round_num < MAX_ROUNDS:
         any_action = False
         round_num += 1
 
@@ -401,10 +417,13 @@ def simulate_spin(
                 mult_sum = sum(mults[r][row] for r, row in cl["cells"])
                 spin_win += base_pay * mult_sum   # bet-units
 
-            # Clear cells, increment multipliers
+            # Clear cells, increment/double multipliers
             for cl in clusters:
                 for r, row in cl["cells"]:
-                    mults[r][row] += 1
+                    if is_fs:
+                        mults[r][row] = min(mults[r][row] * 2, MULT_CAP)
+                    else:
+                        mults[r][row] += 1
                     if mults[r][row] > max_mult:
                         max_mult = mults[r][row]
                     grid[r][row] = None
@@ -413,13 +432,16 @@ def simulate_spin(
 
         # ── 2. Bombs (sequential — leftmost / topmost first) ───────
         active_bombs = find_bombs(grid)
-        while active_bombs:
+        while active_bombs and bombs_det < MAX_BOMB_DET:
             any_action = True
             b_type, b_reel, b_row = active_bombs[0]
             bombs_det += 1
 
             for r, row in get_blast_cells(b_type, b_reel, b_row, grid):
-                mults[r][row] += 1
+                if is_fs:
+                    mults[r][row] = min(mults[r][row] * 2, MULT_CAP)
+                else:
+                    mults[r][row] += 1
                 if mults[r][row] > max_mult:
                     max_mult = mults[r][row]
                 grid[r][row] = None
