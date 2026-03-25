@@ -45,3 +45,6 @@ npm-debug.log*
 # Misc
 *.tmp
 *.bak
+
+# RTP simulation outputs
+rtp_sim_output*.md

@@ -2,6 +2,9 @@
 """
 rtp_sim.py  —  Operation Jackpot RTP Simulation
 
+TODOs and known issues are tracked in the vault:
+  mini-mig/Projects/OperationJackpot/TODOS.md
+
 Mirrors the JavaScript logic in operation-jackpot.html exactly:
   same HEIGHTS, symbol weights, paytable, cluster BFS, bomb mechanics,
   cascade order (clusters first, then bombs), multiplier system, and
@@ -53,7 +56,7 @@ SYM_WEIGHTS: dict[str, float] = {
     "HELICOPTER":   7.0,
     "TANK":         5.0,
     "WILD":         2.0,   # reduced from 3 to lower base hit frequency
-    "SCATTER":      2.0,
+    "SCATTER":      1.05,  # tuning: 1.1 → 1.05, targets ~1in100 FS rate
     "BOMB":         0.3,
     "SUPER_BOMB":   0.3,
 }
@@ -62,19 +65,21 @@ SYM_WEIGHTS: dict[str, float] = {
 # Values reduced ~÷8 from original to target ~95% RTP.
 # Base game multipliers are +1 per clear (linear); FS multipliers double
 # per clear (exponential) — see simulate_spin() for gating logic.
+# Paytable: previous values ×1.055 — base game stays low,
+# almost all return delivered through FS multiplier accumulation.
 PAY: dict[str, dict[int, float]] = {
-    "BOOTS":      {5: 0.05, 7: 0.10, 9: 0.20, 12: 0.40, 15: 0.80},
-    "PISTOL":     {5: 0.08, 7: 0.13, 9: 0.25, 12: 0.50, 15: 1.00},
-    "RIFLE":      {5: 0.10, 7: 0.20, 9: 0.40, 12: 0.75, 15: 1.50},
-    "GRENADE":    {5: 0.13, 7: 0.25, 9: 0.50, 12: 1.00, 15: 2.00},
-    "HELICOPTER": {5: 0.20, 7: 0.40, 9: 0.75, 12: 1.50, 15: 3.00},
-    "TANK":       {5: 0.25, 7: 0.65, 9: 1.25, 12: 2.50, 15: 6.25},
-    "WILD":       {5: 0.13, 7: 0.25, 9: 0.50, 12: 1.00, 15: 2.50},
+    "BOOTS":      {5: 0.053, 7: 0.103, 9: 0.207, 12: 0.413, 15: 0.826},
+    "PISTOL":     {5: 0.082, 7: 0.138, 9: 0.275, 12: 0.523, 15: 1.033},
+    "RIFLE":      {5: 0.103, 7: 0.207, 9: 0.413, 12: 0.799, 15: 1.556},
+    "GRENADE":    {5: 0.135, 7: 0.275, 9: 0.523, 12: 1.033, 15: 2.066},
+    "HELICOPTER": {5: 0.207, 7: 0.413, 9: 0.799, 12: 1.556, 15: 3.098},
+    "TANK":       {5: 0.260, 7: 0.689, 9: 1.308, 12: 2.588, 15: 6.471},
+    "WILD":       {5: 0.135, 7: 0.275, 9: 0.523, 12: 1.033, 15: 2.588},
 }
 
 PAY_TIERS = [5, 7, 9, 12, 15]
 
-FS_TABLE: dict[int, int] = {3: 8, 4: 12, 5: 20}
+FS_TABLE: dict[int, int] = {3: 5, 4: 8, 5: 12}   # reduced from {3:8, 4:12, 5:20}
 
 # Symbols that cannot join or form clusters
 SPECIALS = frozenset({"WILD", "SCATTER", "BOMB", "SUPER_BOMB"})
@@ -98,7 +103,7 @@ def _build_pool(reel: int, is_fs: bool) -> tuple[list[str], list[float]]:
             continue
         if key == "BOMB" and is_fs:
             continue
-        eff = 1.0 if (is_fs and key == "SUPER_BOMB") else w
+        eff = 0.25 if (is_fs and key == "SUPER_BOMB") else w   # tuning: 0.1 → 0.25, allows multiplier building
         total += eff
         keys.append(key)
         cumulative.append(total)
@@ -420,10 +425,7 @@ def simulate_spin(
             # Clear cells, increment/double multipliers
             for cl in clusters:
                 for r, row in cl["cells"]:
-                    if is_fs:
-                        mults[r][row] = min(mults[r][row] * 2, MULT_CAP)
-                    else:
-                        mults[r][row] += 1
+                    mults[r][row] = min(mults[r][row] * 2, MULT_CAP)
                     if mults[r][row] > max_mult:
                         max_mult = mults[r][row]
                     grid[r][row] = None
@@ -438,10 +440,7 @@ def simulate_spin(
             bombs_det += 1
 
             for r, row in get_blast_cells(b_type, b_reel, b_row, grid):
-                if is_fs:
-                    mults[r][row] = min(mults[r][row] * 2, MULT_CAP)
-                else:
-                    mults[r][row] += 1
+                mults[r][row] = min(mults[r][row] * 2, MULT_CAP)
                 if mults[r][row] > max_mult:
                     max_mult = mults[r][row]
                 grid[r][row] = None
@@ -501,13 +500,16 @@ def _worker(args: tuple) -> dict:
 
         # ── Free spins trigger ──────────────────────────────────────
         if result["scatters"] >= 3:
-            fs_triggers += 1
-            spins_left   = FS_TABLE[min(result["scatters"], 5)]
-            fs_mults     = result["mults"]
+            fs_triggers   += 1
+            MAX_FS_SPINS   = 500   # safety cap (total played) — see TODOS.md
+            spins_left     = FS_TABLE[min(result["scatters"], 5)]
+            fs_mults       = result["mults"]
+            fs_spins_played = 0
 
-            while spins_left > 0:
-                spins_left     -= 1
-                total_fs_spins += 1
+            while spins_left > 0 and fs_spins_played < MAX_FS_SPINS:
+                spins_left      -= 1
+                fs_spins_played += 1
+                total_fs_spins  += 1
 
                 fs_res       = simulate_spin(is_fs=True, mults=fs_mults)
                 session_win += fs_res["win"]
